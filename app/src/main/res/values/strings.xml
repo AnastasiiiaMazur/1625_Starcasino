@@ -1,3 +1,12 @@
 <resources>
     <string name="app_name">1625_Starcasino</string>
+    <string name="start_welcome">WELCOME TO</string>
+    <string name="start_welcome_motoloop">MOTOLOOP</string>
+    <string name="start_welcome_message">PLAN, RIDE, TRACK - OFFLINE!</string>
+    <string name="welcome_message">Welcome back, Rider!</string>
+    <string name="welcome_qustions">What do you want to do?</string>
+    <string name="button_1">Generate Your Route</string>
+    <string name="button_2">Explore Saved Rides</string>
+    <string name="button_3">View Your Stats</string>
+    <string name="button_4">Create Route Manually</string>
 </resources>
