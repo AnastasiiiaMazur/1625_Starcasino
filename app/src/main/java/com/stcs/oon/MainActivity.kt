@@ -5,12 +5,15 @@ import android.os.Bundle
 import android.view.View
 import android.widget.ImageView
 import android.widget.TextView
+import androidx.activity.addCallback
 import androidx.activity.enableEdgeToEdge
+import androidx.annotation.IdRes
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.navigation.fragment.NavHostFragment
 import kotlin.math.max
 
 class MainActivity : AppCompatActivity() {
@@ -40,7 +43,44 @@ class MainActivity : AppCompatActivity() {
         homeButton = findViewById(R.id.homeButton)
         statsButton = findViewById(R.id.statsButton)
         manualRouteButton = findViewById(R.id.manualRouteButton)
+
+        val navHostFragment = supportFragmentManager.findFragmentById(R.id.nav_host_fragment) as NavHostFragment
+        val navController = navHostFragment.navController
+
+        navController.addOnDestinationChangedListener { _, destination, _ ->
+            changeTitle(destination.id)
+        }
+
+        homeButton.setOnClickListener    { navController.navigate(R.id.homeFragment) }
+        newRouteButton.setOnClickListener  { navController.navigate(R.id.newRouteFragment) }
+        savedRoutesButton.setOnClickListener   { navController.navigate(R.id.savedRoutesFragment) }
+        statsButton.setOnClickListener    { navController.navigate(R.id.statsFragment) }
+        manualRouteButton.setOnClickListener  { navController.navigate(R.id.manualRouteFragment) }
+
+        onBackPressedDispatcher.addCallback(this) {
+            val currentDestination = navHostFragment.navController.currentDestination?.id
+
+            if (currentDestination == R.id.homeFragment) {
+                finish()
+            } else {
+                navHostFragment.navController.navigate(R.id.homeFragment)
+            }
+        }
     }
+
+    private fun changeTitle(@IdRes destId: Int) {
+        when (destId) {
+            R.id.homeFragment -> { pageTitle.text = "HOME" }
+            R.id.newRouteFragment -> { pageTitle.text = "TRIP GENERATOR" }
+            R.id.savedRoutesFragment -> { pageTitle.text = "RIDE GALLERY" }
+            R.id.statsFragment -> { pageTitle.text = "STATISTICS" }
+            R.id.manualRouteFragment -> { pageTitle.text = "CREATE MANUAL RIDE" }
+            else -> {
+                pageTitle.text = ""
+            }
+        }
+    }
+
 
     private fun applyFullscreen() {
         WindowCompat.setDecorFitsSystemWindows(window, false)

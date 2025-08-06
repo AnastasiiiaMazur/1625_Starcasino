@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<navigation xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/nav_graph"
+    app:startDestination="@id/homeFragment">
+
+    <fragment
+        android:id="@+id/homeFragment"
+        android:name="com.stcs.oon.fragments.HomeFragment"
+        android:label="Home"
+        tools:layout="@layout/fragment_home" />
+
+    <fragment
+        android:id="@+id/manualRouteFragment"
+        android:name="com.stcs.oon.fragments.ManualRouteFragment"
+        android:label="Manual Route"
+        tools:layout="@layout/fragment_manual_route" />
+
+    <fragment
+        android:id="@+id/statsFragment"
+        android:name="com.stcs.oon.fragments.StatsFragment"
+        android:label="Stats"
+        tools:layout="@layout/fragment_stats" />
+
+    <fragment
+        android:id="@+id/newRouteFragment"
+        android:name="com.stcs.oon.fragments.NewRouteFragment"
+        android:label="New Route"
+        tools:layout="@layout/fragment_new_route" />
+
+    <fragment
+        android:id="@+id/savedRoutesFragment"
+        android:name="com.stcs.oon.fragments.SavedRoutesFragment"
+        android:label="Saved Routes"
+        tools:layout="@layout/fragment_saved_routes" />
+
+</navigation>
