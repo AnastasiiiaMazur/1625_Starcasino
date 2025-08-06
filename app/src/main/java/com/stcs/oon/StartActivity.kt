@@ -1,9 +1,9 @@
 package com.stcs.oon
 
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.view.View
-import android.widget.ImageView
 import android.widget.TextView
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
@@ -13,33 +13,24 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import kotlin.math.max
 
-class MainActivity : AppCompatActivity() {
+class StartActivity : AppCompatActivity() {
 
-    private lateinit var pageTitle: TextView
-    private lateinit var backButton: ImageView
-    private lateinit var settingsButton: ImageView
-    private lateinit var newRouteButton: ImageView
-    private lateinit var savedRoutesButton: ImageView
-    private lateinit var homeButton: ImageView
-    private lateinit var statsButton: ImageView
-    private lateinit var manualRouteButton: ImageView
-
+    private lateinit var startButton: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        setContentView(R.layout.activity_main)
+        setContentView(R.layout.start_screen)
 
         applyFullscreen()
 
-        pageTitle = findViewById(R.id.pageTitle)
-        backButton = findViewById(R.id.backButton)
-        settingsButton = findViewById(R.id.settingsButton)
-        newRouteButton = findViewById(R.id.newRouteButton)
-        savedRoutesButton = findViewById(R.id.savedRoutesButton)
-        homeButton = findViewById(R.id.homeButton)
-        statsButton = findViewById(R.id.statsButton)
-        manualRouteButton = findViewById(R.id.manualRouteButton)
+        startButton = findViewById(R.id.startButton)
+
+        startButton.setOnClickListener {
+            val i = Intent(this@StartActivity, MainActivity::class.java)
+            startActivity(i)
+        }
+
     }
 
     private fun applyFullscreen() {
