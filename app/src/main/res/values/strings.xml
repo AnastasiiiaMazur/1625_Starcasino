@@ -10,4 +10,5 @@
     <string name="button_3">View Your Stats</string>
     <string name="button_4">Create Route Manually</string>
     <string name="get_started">GET STARTED</string>
+    <string name="saved_rides">Saved Rides</string>
 </resources>
