@@ -1,7 +1,151 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/dark_red">
+    android:orientation="vertical">
 
-</androidx.constraintlayout.widget.ConstraintLayout>
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="130dp"
+        android:textSize="24sp"
+        android:textColor="@color/text_red"
+        android:text="@string/welcome_message"
+        android:fontFamily="@font/montserrat_regular"
+        android:layout_gravity="center"/>
+
+    <ImageView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"/>
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:textSize="24sp"
+        android:textColor="@color/text_red"
+        android:text="@string/welcome_qustions"
+        android:fontFamily="@font/montserrat_regular"
+        android:layout_gravity="center"/>
+
+    <LinearLayout
+        android:id="@+id/newRouteBtn"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:background="@drawable/basic_button"
+        android:layout_marginHorizontal="20dp"
+        android:layout_marginTop="20dp">
+
+        <ImageView
+            android:layout_width="60dp"
+            android:layout_height="60dp"
+            android:padding="10dp"
+            android:src="@drawable/ic_new_route"
+            android:background="@drawable/nav_button_back"
+            android:layout_marginStart="30dp"/>
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="match_parent"
+            android:gravity="end|center_vertical"
+            android:layout_marginEnd="30dp"
+            android:text="@string/button_1"
+            android:textColor="@color/white"
+            android:textSize="20sp"
+            android:fontFamily="@font/montserrat_regular"/>
+
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/savedRidesBtn"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:background="@drawable/basic_button"
+        android:layout_marginHorizontal="20dp"
+        android:layout_marginTop="10dp">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="match_parent"
+            android:gravity="start|center_vertical"
+            android:layout_marginStart="30dp"
+            android:text="@string/button_2"
+            android:textColor="@color/white"
+            android:textSize="20sp"
+            android:fontFamily="@font/montserrat_regular"/>
+
+        <ImageView
+            android:layout_width="60dp"
+            android:layout_height="60dp"
+            android:padding="10dp"
+            android:src="@drawable/ic_saved_routes"
+            android:background="@drawable/nav_button_back"
+            android:layout_marginEnd="30dp"/>
+
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/statsBtn"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:background="@drawable/basic_button"
+        android:layout_marginHorizontal="20dp"
+        android:layout_marginTop="10dp">
+
+        <ImageView
+            android:layout_width="60dp"
+            android:layout_height="60dp"
+            android:padding="10dp"
+            android:src="@drawable/ic_stats"
+            android:background="@drawable/nav_button_back"
+            android:layout_marginStart="30dp"/>
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="match_parent"
+            android:gravity="end|center_vertical"
+            android:layout_marginEnd="30dp"
+            android:text="@string/button_3"
+            android:textColor="@color/white"
+            android:textSize="20sp"
+            android:fontFamily="@font/montserrat_regular"/>
+
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/manualRouteBtn"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:background="@drawable/basic_button"
+        android:layout_marginHorizontal="20dp"
+        android:layout_marginTop="10dp">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="match_parent"
+            android:gravity="start|center_vertical"
+            android:layout_marginStart="30dp"
+            android:text="@string/button_4"
+            android:textColor="@color/white"
+            android:textSize="20sp"
+            android:fontFamily="@font/montserrat_regular"/>
+
+        <ImageView
+            android:layout_width="60dp"
+            android:layout_height="60dp"
+            android:padding="10dp"
+            android:src="@drawable/ic_route_manually"
+            android:background="@drawable/nav_button_back"
+            android:layout_marginEnd="30dp"/>
+
+    </LinearLayout>
+
+</LinearLayout>
