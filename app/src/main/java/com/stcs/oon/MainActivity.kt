@@ -56,12 +56,27 @@ class MainActivity : AppCompatActivity() {
         savedRoutesButton.setOnClickListener   { navController.navigate(R.id.savedRoutesFragment) }
         statsButton.setOnClickListener    { navController.navigate(R.id.statsFragment) }
         manualRouteButton.setOnClickListener  { navController.navigate(R.id.manualRouteFragment) }
+        settingsButton.setOnClickListener { navController.navigate(R.id.settingsFragment) }
+
+        backButton.setOnClickListener {
+            val currentDestination = navHostFragment.navController.currentDestination?.id
+
+            if (currentDestination == R.id.homeFragment) {
+                finish()
+            } else if (currentDestination == R.id.settingsFragment) {
+                navHostFragment.navController.popBackStack()
+            } else {
+                navHostFragment.navController.navigate(R.id.homeFragment)
+            }
+        }
 
         onBackPressedDispatcher.addCallback(this) {
             val currentDestination = navHostFragment.navController.currentDestination?.id
 
             if (currentDestination == R.id.homeFragment) {
                 finish()
+            } else if (currentDestination == R.id.settingsFragment) {
+                navHostFragment.navController.popBackStack()
             } else {
                 navHostFragment.navController.navigate(R.id.homeFragment)
             }
@@ -75,6 +90,7 @@ class MainActivity : AppCompatActivity() {
             R.id.savedRoutesFragment -> { pageTitle.text = "RIDE GALLERY" }
             R.id.statsFragment -> { pageTitle.text = "STATISTICS" }
             R.id.manualRouteFragment -> { pageTitle.text = "CREATE MANUAL RIDE" }
+            R.id.settingsFragment -> { pageTitle.text = "SETTINGS" }
             else -> {
                 pageTitle.text = ""
             }
