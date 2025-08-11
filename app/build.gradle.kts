@@ -48,4 +48,6 @@ dependencies {
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     implementation("com.github.PhilJay:MPAndroidChart:v3.1.0")
+    implementation("org.osmdroid:osmdroid-android:6.1.20")
+    implementation("org.osmdroid:osmdroid-wms:6.1.20")
 }
