@@ -36,6 +36,7 @@
         android:layout_gravity="center" />
 
     <TextView
+        android:id="@+id/km"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="10dp"
@@ -48,6 +49,7 @@
         android:layout_gravity="center" />
 
     <TextView
+        android:id="@+id/mi"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="5dp"
@@ -82,12 +84,14 @@
         android:gravity="center">
 
         <ImageView
+            android:id="@+id/rate"
             android:layout_width="35dp"
             android:layout_height="35dp"
             android:src="@drawable/star_empty"
             app:tint="@color/black"/>
 
         <ImageView
+            android:id="@+id/privacy"
             android:layout_width="35dp"
             android:layout_height="35dp"
             android:layout_marginHorizontal="39dp"
@@ -96,6 +100,7 @@
 
 
         <ImageView
+            android:id="@+id/share"
             android:layout_width="35dp"
             android:layout_height="35dp"
             android:src="@drawable/ic_share"
