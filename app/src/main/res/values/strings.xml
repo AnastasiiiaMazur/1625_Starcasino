@@ -12,4 +12,5 @@
     <string name="get_started">GET STARTED</string>
     <string name="saved_rides">Saved Rides</string>
     <string name="plan_your_trip">Plan Your Trip</string>
+    <string name="create_manual_route">Create Manual Route</string>
 </resources>
