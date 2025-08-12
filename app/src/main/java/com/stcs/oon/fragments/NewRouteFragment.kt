@@ -1,6 +1,7 @@
 package com.stcs.oon.fragments
 
 import android.os.Bundle
+import android.util.Log
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -80,12 +81,10 @@ class NewRouteFragment : Fragment(R.layout.fragment_new_route) {
 
 
 
-    // inside your NewRouteFragment class
     private val routeSession: RouteSessionViewModel by activityViewModels()
 
-    // keep the last computed polyline
     private var lastRoutePoints: List<GeoPoint> = emptyList()
-    private var lastProfile: String = "cycling-regular" // keep in sync with selectedType
+    private var lastProfile: String = "cycling-regular"
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
@@ -119,18 +118,32 @@ class NewRouteFragment : Fragment(R.layout.fragment_new_route) {
 
 
         startRouteBtn.setOnClickListener {
-            if (lastRoutePoints.isEmpty()) return@setOnClickListener
             val center = startCenter ?: return@setOnClickListener
+            val pts = lastRoutePoints
+            if (pts.isEmpty()) return@setOnClickListener
 
-            val draft = RouteDraft(
-                points = lastRoutePoints.map { LatLngDto(it.latitude, it.longitude) },
-                lengthMeters = distanceKm * 1000,
-                profile = lastProfile,
-                seed = if (selectedDir.name == "RANDOM") randomSeed else 1,
-                start = LatLngDto(center.latitude, center.longitude)
-            )
-            routeSession.draft = draft
-            findNavController().navigate(R.id.navigationFragment)
+            // prevent double taps
+            startRouteBtn.isEnabled = false
+
+            viewLifecycleOwner.lifecycleScope.launchWhenStarted {
+                // Build the draft off the main thread
+                val draft = withContext(Dispatchers.Default) {
+                    // Ensure points are already simplified & capped (<= 500)
+                    val simplified = simplifyForMap(pts).let { capPoints(it, 400) }
+
+                    RouteDraft(
+                        points = simplified.map { LatLngDto(it.latitude, it.longitude) },
+                        lengthMeters = distanceKm * 1000,
+                        profile = lastProfile,
+                        seed = if (selectedDir.name == "RANDOM") randomSeed else 1,
+                        start = LatLngDto(center.latitude, center.longitude)
+                    )
+                }
+
+                routeSession.draft = draft
+                startRouteBtn.isEnabled = true
+                findNavController().navigate(R.id.navigationFragment) // <-- no args
+            }
         }
 
 
@@ -308,10 +321,19 @@ class NewRouteFragment : Fragment(R.layout.fragment_new_route) {
                     Direction.RANDOM           -> points
                 }
 
-                // new
-                lastRoutePoints = points
+                val simplified = withContext(Dispatchers.Default) { simplifyForMap(points).let { capPoints(it, 400) } }
+
+//                val simplified = withContext(Dispatchers.Default) {
+//                    simplifyForMap(points)
+//                }
+
+                lastRoutePoints = simplified     // keep this for NavigatorFragment
                 lastProfile = profile
-                startRouteBtn.isEnabled = points.isNotEmpty()
+                startRouteBtn.isEnabled = simplified.isNotEmpty()
+
+                drawPolyline(simplified)
+
+                Log.d("Route", "raw=${points.size}, simplified=${simplified.size}, lenKm=$distanceKm")
 
                 drawPolyline(points)
             } catch (e: CancellationException) {
@@ -339,4 +361,75 @@ class NewRouteFragment : Fragment(R.layout.fragment_new_route) {
         mapView.zoomToBoundingBox(bbox, true, 80)
         mapView.invalidate()
     }
+
+    // --- Polyline simplification & capping ---
+
+    private fun simplifyForMap(points: List<GeoPoint>): List<GeoPoint> {
+        if (points.size <= 2) return points
+        // 10 m tolerance is usually plenty; tweak as needed.
+        val dp = douglasPeucker(points, toleranceMeters = 10.0)
+        return capPoints(dp, maxPoints = 500) // keep at most 500 for snappy UI
+    }
+
+    private fun capPoints(points: List<GeoPoint>, maxPoints: Int): List<GeoPoint> {
+        if (points.size <= maxPoints) return points
+        val step = kotlin.math.ceil(points.size / maxPoints.toDouble()).toInt()
+        val out = ArrayList<GeoPoint>((points.size / step) + 1)
+        for (i in points.indices step step) out.add(points[i])
+        if (out.last() != points.last()) out.add(points.last())
+        return out
+    }
+
+    // Douglas–Peucker in meters (approx), using simple meters-per-degree projection
+    private fun douglasPeucker(points: List<GeoPoint>, toleranceMeters: Double): List<GeoPoint> {
+        val n = points.size
+        if (n < 3) return points
+        val keep = BooleanArray(n)
+        keep[0] = true
+        keep[n - 1] = true
+
+        val refLat = points.first().latitude
+        fun toXY(p: GeoPoint): Pair<Double, Double> {
+            val mPerDegLat = 111_320.0
+            val mPerDegLon = 111_320.0 * kotlin.math.cos(Math.toRadians(refLat))
+            return Pair(p.longitude * mPerDegLon, p.latitude * mPerDegLat)
+        }
+        val xy = points.map { toXY(it) }
+
+        fun perpDist(idx: Int, a: Int, b: Int): Double {
+            val (x, y) = xy[idx]
+            val (x1, y1) = xy[a]
+            val (x2, y2) = xy[b]
+            if (x1 == x2 && y1 == y2) {
+                val dx = x - x1; val dy = y - y1
+                return kotlin.math.hypot(dx, dy)
+            }
+            val dx = x2 - x1; val dy = y2 - y1
+            val t = ((x - x1) * dx + (y - y1) * dy) / (dx*dx + dy*dy)
+            val clamped = t.coerceIn(0.0, 1.0)
+            val projX = x1 + clamped * dx
+            val projY = y1 + clamped * dy
+            return kotlin.math.hypot(x - projX, y - projY)
+        }
+
+        fun recurse(a: Int, b: Int) {
+            var maxDist = 0.0
+            var idx = -1
+            for (i in a + 1 until b) {
+                val d = perpDist(i, a, b)
+                if (d > maxDist) { maxDist = d; idx = i }
+            }
+            if (maxDist > toleranceMeters && idx != -1) {
+                keep[idx] = true
+                recurse(a, idx)
+                recurse(idx, b)
+            }
+        }
+        recurse(0, n - 1)
+
+        val out = ArrayList<GeoPoint>()
+        for (i in 0 until n) if (keep[i]) out.add(points[i])
+        return out
+    }
+
 }
