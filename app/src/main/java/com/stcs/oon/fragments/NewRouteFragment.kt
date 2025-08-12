@@ -11,8 +11,12 @@ import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.fragment.app.Fragment
+import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.lifecycleScope
+import androidx.navigation.fragment.findNavController
 import com.stcs.oon.R
+import com.stcs.oon.db.LatLngDto
+import com.stcs.oon.db.RouteDraft
 import kotlinx.coroutines.Job
 import org.osmdroid.config.Configuration
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
@@ -25,6 +29,7 @@ import com.stcs.oon.fragments.helpers.*
 import com.stcs.oon.fragments.helpers.LocationKit
 import com.stcs.oon.fragments.helpers.LocationPermissionRequester
 import kotlinx.coroutines.*
+import com.stcs.oon.db.RouteSessionViewModel
 
 
 class NewRouteFragment : Fragment(R.layout.fragment_new_route) {
@@ -73,6 +78,15 @@ class NewRouteFragment : Fragment(R.layout.fragment_new_route) {
     private var routeJob: Job? = null
     private var randomSeed = 1
 
+
+
+    // inside your NewRouteFragment class
+    private val routeSession: RouteSessionViewModel by activityViewModels()
+
+    // keep the last computed polyline
+    private var lastRoutePoints: List<GeoPoint> = emptyList()
+    private var lastProfile: String = "cycling-regular" // keep in sync with selectedType
+
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
@@ -102,7 +116,23 @@ class NewRouteFragment : Fragment(R.layout.fragment_new_route) {
         setupUiGroups()
         setupKmSeekbar()
 
-        startRouteBtn.setOnClickListener { requestRoute() }
+
+
+        startRouteBtn.setOnClickListener {
+            if (lastRoutePoints.isEmpty()) return@setOnClickListener
+            val center = startCenter ?: return@setOnClickListener
+
+            val draft = RouteDraft(
+                points = lastRoutePoints.map { LatLngDto(it.latitude, it.longitude) },
+                lengthMeters = distanceKm * 1000,
+                profile = lastProfile,
+                seed = if (selectedDir.name == "RANDOM") randomSeed else 1,
+                start = LatLngDto(center.latitude, center.longitude)
+            )
+            routeSession.draft = draft
+            findNavController().navigate(R.id.navigationFragment)
+        }
+
 
         locationRequester = LocationPermissionRequester(
             fragment = this,
@@ -277,6 +307,11 @@ class NewRouteFragment : Fragment(R.layout.fragment_new_route) {
                     Direction.COUNTERCLOCKWISE -> points.asReversed()
                     Direction.RANDOM           -> points
                 }
+
+                // new
+                lastRoutePoints = points
+                lastProfile = profile
+                startRouteBtn.isEnabled = points.isNotEmpty()
 
                 drawPolyline(points)
             } catch (e: CancellationException) {
