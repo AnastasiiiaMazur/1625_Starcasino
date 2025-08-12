@@ -26,17 +26,6 @@
                 android:fontFamily="@font/montserrat_regular"
                 android:layout_gravity="center"/>
 
-<!--            <ImageView-->
-<!--                android:id="@+id/map"-->
-<!--                android:layout_width="match_parent"-->
-<!--                android:layout_height="wrap_content"-->
-<!--                android:layout_marginHorizontal="20dp"-->
-<!--                android:layout_marginTop="10dp"-->
-<!--                android:src="@drawable/map_placeholder"-->
-<!--                android:scaleType="centerCrop"-->
-<!--                android:background="@drawable/nav_button_back"-->
-<!--                android:clipToOutline="true"/>-->
-
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="200dp"
