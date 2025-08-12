@@ -15,4 +15,5 @@
     <string name="create_manual_route">Create Manual Route</string>
     <string name="manage_app_settings"><![CDATA[Manage App & Settings]]></string>
     <string name="ors_api_key">eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImZjM2Y2ZGIwYWRmOTRmZGZiMGJiN2IzZjM2NmU0MTBhIiwiaCI6Im11cm11cjY0In0=</string>
+    <string name="your_ride_route">Your Ride Route</string>
 </resources>

@@ -313,7 +313,7 @@
             </LinearLayout>
 
             <TextView
-                android:id="@+id/generateRouteBtn"
+                android:id="@+id/startRouteBtn"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="30dp"
@@ -321,7 +321,7 @@
                 android:textSize="18sp"
                 android:textColor="@color/white"
                 android:fontFamily="@font/montserrat_semibold"
-                android:text="GENERATE ROUTE"
+                android:text="START ROUTE"
                 android:paddingVertical="8dp"
                 android:paddingHorizontal="25dp"
                 android:layout_gravity="center"/>

@@ -43,7 +43,7 @@ class NewRouteFragment : Fragment(R.layout.fragment_new_route) {
     private lateinit var counterclockwiseRoute: LinearLayout
     private lateinit var randomRoute: LinearLayout
 
-    private lateinit var generateRouteBtn: TextView
+    private lateinit var startRouteBtn: TextView
 
     // Map + location
     private lateinit var mapView: MapView
@@ -86,7 +86,7 @@ class NewRouteFragment : Fragment(R.layout.fragment_new_route) {
         clockwiseRoute = view.findViewById(R.id.clockwiseRoute)
         counterclockwiseRoute = view.findViewById(R.id.counterclockwiseRoute)
         randomRoute = view.findViewById(R.id.randomRoute)
-        generateRouteBtn = view.findViewById(R.id.generateRouteBtn)
+        startRouteBtn = view.findViewById(R.id.startRouteBtn)
 
         val base = requireContext().cacheDir.resolve("osmdroid")
         val tiles = base.resolve("tiles")
@@ -102,7 +102,7 @@ class NewRouteFragment : Fragment(R.layout.fragment_new_route) {
         setupUiGroups()
         setupKmSeekbar()
 
-        generateRouteBtn.setOnClickListener { requestRoute() }
+        startRouteBtn.setOnClickListener { requestRoute() }
 
         locationRequester = LocationPermissionRequester(
             fragment = this,
