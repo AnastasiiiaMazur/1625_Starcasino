@@ -2,13 +2,12 @@ package com.stcs.oon.fragments.extra
 
 import android.os.Build
 import android.os.Bundle
-import android.util.Log
+import android.os.SystemClock
 import android.view.View
 import androidx.fragment.app.Fragment
 import com.stcs.oon.R
 import android.widget.TextView
 import android.widget.Toast
-import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 import org.osmdroid.config.Configuration
@@ -19,13 +18,18 @@ import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Polyline
 import kotlin.math.*
 import androidx.navigation.fragment.findNavController
+import com.stcs.oon.db.AppDatabase
 import com.stcs.oon.db.LatLngDto
+import com.stcs.oon.db.RideEntity
 import com.stcs.oon.db.RouteSpec
+import com.stcs.oon.fragments.helpers.LocationKit
+import com.stcs.oon.fragments.helpers.LocationPermissionRequester
 import kotlinx.coroutines.*
 import com.stcs.oon.fragments.helpers.OrsClient
 import com.stcs.oon.fragments.helpers.OrsDirectionsBody
 import com.stcs.oon.fragments.helpers.OrsOptions
 import com.stcs.oon.fragments.helpers.OrsRoundTrip
+import org.osmdroid.views.overlay.mylocation.MyLocationNewOverlay
 
 
 class NavigatorFragment : Fragment(R.layout.fragment_navigator) {
@@ -42,6 +46,13 @@ class NavigatorFragment : Fragment(R.layout.fragment_navigator) {
     private var routePolyline: Polyline? = null
     private var fetchJob: Job? = null
 
+    // location / navigation state
+    private lateinit var locationRequester: LocationPermissionRequester
+    private var myLocationOverlay: MyLocationNewOverlay? = null
+    private var navStarted = false
+    private var navStartElapsedMs: Long = 0L
+    private lateinit var spec: RouteSpec
+
     companion object {
         private const val ARG_ROUTE_SPEC = "arg_route_spec"
     }
@@ -49,9 +60,6 @@ class NavigatorFragment : Fragment(R.layout.fragment_navigator) {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        Log.d("NAV", "Navigator onViewCreated")
-
-        // IDs you mentioned
         mapView = view.findViewById(R.id.map)
         distanceTv = view.findViewById(R.id.distance)
         timeTv = view.findViewById(R.id.time)
@@ -69,44 +77,150 @@ class NavigatorFragment : Fragment(R.layout.fragment_navigator) {
         mapView.setMultiTouchControls(true)
         mapView.setTileSource(TileSourceFactory.MAPNIK)
 
-        val spec: RouteSpec? = if (Build.VERSION.SDK_INT >= 33) {
+        // read spec
+        val argSpec: RouteSpec? = if (Build.VERSION.SDK_INT >= 33) {
             requireArguments().getParcelable(ARG_ROUTE_SPEC, RouteSpec::class.java)
         } else {
-            @Suppress("DEPRECATION")
-            requireArguments().getParcelable(ARG_ROUTE_SPEC)
+            @Suppress("DEPRECATION") requireArguments().getParcelable(ARG_ROUTE_SPEC)
         }
-        if (spec == null) {
+        if (argSpec == null) {
             Toast.makeText(requireContext(), "No route spec.", Toast.LENGTH_SHORT).show()
             findNavController().popBackStack()
             return
         }
+        spec = argSpec
 
+        // header
         distanceTv.text = "${(spec.lengthMeters / 1000.0).roundToInt()} km"
         timeTv.text = "~" + estimateTimeText(spec.lengthMeters)
         difficultyTv.text = "${difficultyForDistance(spec.lengthMeters)}/5"
 
+        // draw route (background)
         fetchJob?.cancel()
         fetchJob = viewLifecycleOwner.lifecycleScope.launch {
             try {
-                val pts = fetchRouteForSpec(spec)        // background
+                val pts = fetchRouteForSpec(spec)
                 drawPolyline(pts.map { GeoPoint(it.lat, it.lon) })
             } catch (e: Exception) {
                 Toast.makeText(requireContext(), "Routing failed: ${e.message}", Toast.LENGTH_LONG).show()
             }
         }
 
-        // (Hook up Start/Save later — keep UI responsive while we finish the drawing path)
+        // location permission helper
+        locationRequester = LocationPermissionRequester(
+            fragment = this,
+            onGranted = { startFollowing() },
+            onDenied = { permanently ->
+                if (permanently) LocationKit.openAppSettings(this)
+                else Toast.makeText(
+                    requireContext(),
+                    "Location permission is required.",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        )
+
+        // START: follow user + start timer
+        startNavBtn.setOnClickListener {
+            if (navStarted) return@setOnClickListener
+            locationRequester.request() // will call startFollowing() if granted
+        }
+
+        // SAVE: capture data into DB
+        saveRouteBtn.setOnClickListener {
+            saveRideNow()
+        }
     }
 
     override fun onDestroyView() {
         fetchJob?.cancel()
+        myLocationOverlay?.disableMyLocation()
+        myLocationOverlay = null
         routePolyline = null
         super.onDestroyView()
     }
 
+    // ----- Start following -----
+    private fun startFollowing() {
+        if (navStarted) return
+        navStarted = true
+        startNavBtn.isEnabled = false
+        startNavBtn.text = getString(R.string.start_navigation) // keep label, disabled
+
+        // attach overlay; follow + animate
+        myLocationOverlay = LocationKit.attachMyLocationOverlay(
+            mapView = mapView,
+            context = requireContext(),
+            follow = true
+        ) { firstFix ->
+            requireActivity().runOnUiThread {
+                mapView.controller.animateTo(firstFix)
+            }
+        }
+        mapView.overlays.add(myLocationOverlay)
+        navStartElapsedMs = SystemClock.elapsedRealtime()
+        Toast.makeText(requireContext(), "Navigation started", Toast.LENGTH_SHORT).show()
+    }
+
+    // ----- Save to DB -----
+    private fun saveRideNow() {
+        // current location
+        val loc = myLocationOverlay?.myLocation
+            ?: LocationKit.getBestLastKnownLocation(requireContext())
+        if (loc == null) {
+            Toast.makeText(requireContext(), "No current location yet.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val currentGeo: GeoPoint? = myLocationOverlay?.myLocation ?: LocationKit.toGeoPoint(LocationKit.getBestLastKnownLocation(requireContext()))
+        val startPt = GeoPoint(spec.start.lat, spec.start.lon)
+
+        val distanceMeters = startPt.distanceToAsDouble(currentGeo).roundToInt()
+        val durationSeconds = max(0L,
+            (SystemClock.elapsedRealtime() - navStartElapsedMs) / 1000L
+        )
+
+        // avg speed to be set later when user stops -> keep null
+        val difficulty = difficultyForDistance(distanceMeters)
+
+        // Build entity; replace DB accessor with yours
+        val entity = RideEntity(
+            name = "",
+            startLat = spec.start.lat,
+            startLon = spec.start.lon,
+            specLengthMeters = spec.lengthMeters,
+            specProfile = spec.profile,
+            specSeed = spec.seed,
+            specDir = spec.dir,
+            polylineJson = null,
+            distanceMeters = distanceMeters,
+            durationSeconds = durationSeconds,
+            avgSpeedKmh = null,
+            difficulty = difficulty,
+            description = null,
+            rating = null
+        )
+
+        viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val dao = AppDatabase.getInstance(requireContext()).rideDao() // <-- your accessor
+                val id = dao.insert(entity)
+                dao.updateName(id, "Route $id")
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(requireContext(), "Ride saved as Route $id", Toast.LENGTH_LONG).show()
+                    findNavController().popBackStack() // or navigate to saved list
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(requireContext(), "Save failed: ${e.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
+
+    // ---------- ORS fetch from spec ----------
     private suspend fun fetchRouteForSpec(spec: RouteSpec): List<LatLngDto> = withContext(Dispatchers.IO) {
         val body = OrsDirectionsBody(
-            coordinates = listOf(listOf(spec.start.lon, spec.start.lat)),  // [lon, lat]
+            coordinates = listOf(listOf(spec.start.lon, spec.start.lat)),
             options = OrsOptions(
                 roundTrip = OrsRoundTrip(
                     length = spec.lengthMeters.coerceIn(1_000, 150_000),
@@ -213,5 +327,6 @@ class NavigatorFragment : Fragment(R.layout.fragment_navigator) {
         return out
     }
 }
+
 
 
