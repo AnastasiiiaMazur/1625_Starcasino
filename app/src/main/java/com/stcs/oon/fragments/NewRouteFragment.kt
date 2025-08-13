@@ -11,9 +11,7 @@ import android.widget.PopupWindow
 import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.Toast
-import androidx.core.os.bundleOf
 import androidx.fragment.app.Fragment
-import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.fragment.findNavController
 import com.stcs.oon.R
@@ -31,10 +29,10 @@ import com.stcs.oon.fragments.helpers.LocationKit
 import com.stcs.oon.fragments.helpers.LocationPermissionRequester
 import kotlinx.coroutines.*
 import com.stcs.oon.db.RouteSpec
-import com.stcs.oon.fragments.extra.RouteCache
-import kotlin.math.cos
-import kotlin.math.hypot
 import com.stcs.oon.fragments.helpers.OrsOptions
+import org.osmdroid.views.overlay.MapEventsOverlay
+import org.osmdroid.events.MapEventsReceiver   // <-- not in views.overlay
+import org.osmdroid.views.overlay.Marker
 
 
 class NewRouteFragment : Fragment(R.layout.fragment_new_route) {
@@ -56,6 +54,8 @@ class NewRouteFragment : Fragment(R.layout.fragment_new_route) {
     private lateinit var locationRequester: LocationPermissionRequester
     private var myLocationOverlay: MyLocationNewOverlay? = null
     private var startCenter: GeoPoint? = null
+    private var startMarker: Marker? = null
+    private var mapTapOverlay: MapEventsOverlay? = null
 
     // Drawn route
     private var routePolyline: Polyline? = null
@@ -116,7 +116,10 @@ class NewRouteFragment : Fragment(R.layout.fragment_new_route) {
         setupKmSeekbar()
 
         startRouteBtn.setOnClickListener {
-            Log.d("NAV", "Start tapped")
+            if (selectedStart == StartOption.MANUAL && startCenter == null) {
+                Toast.makeText(requireContext(), "Tap the map to set a start point", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
             val center = startCenter ?: return@setOnClickListener
 
             val profile = when (selectedType) {
@@ -140,9 +143,6 @@ class NewRouteFragment : Fragment(R.layout.fragment_new_route) {
             val args = android.os.Bundle().apply { putParcelable(ARG_ROUTE_SPEC, spec) }
             findNavController().navigate(R.id.navigatorFragment, args)
         }
-
-
-
 
         locationRequester = LocationPermissionRequester(
             fragment = this,
@@ -186,10 +186,24 @@ class NewRouteFragment : Fragment(R.layout.fragment_new_route) {
     // ----- UI groups -----
     private fun setupUiGroups() {
         setupSingleSelect(listOf(startLocation, startManualLocation), 0) { id ->
-            selectedStart =
-                if (id == R.id.startLocation) StartOption.MY_LOCATION else StartOption.MANUAL
-            requestRoute()
+            if (id == R.id.startLocation) {
+                selectedStart = StartOption.MY_LOCATION
+                exitManualStartMode()
+                myLocationOverlay?.enableFollowLocation()
+                // use current device location if we have it
+                myLocationOverlay?.myLocation?.let {
+                    startCenter = GeoPoint(it.latitude, it.longitude)
+                }
+                requestRoute()
+            } else {
+                selectedStart = StartOption.MANUAL
+                myLocationOverlay?.disableFollowLocation()
+                enterManualStartMode()
+                Toast.makeText(requireContext(), "Tap the map (or drag the pin) to set the start", Toast.LENGTH_SHORT).show()
+            }
         }
+
+        // Route type
         setupSingleSelect(listOf(twistyRoute, scenicRoute, flatRoute), 0) { id ->
             selectedType = when (id) {
                 R.id.twistyRoute -> RouteType.TWISTY
@@ -198,6 +212,8 @@ class NewRouteFragment : Fragment(R.layout.fragment_new_route) {
             }
             requestRoute()
         }
+
+        // Direction
         setupSingleSelect(listOf(clockwiseRoute, counterclockwiseRoute, randomRoute), 0) { id ->
             selectedDir = when (id) {
                 R.id.clockwiseRoute -> Direction.CLOCKWISE
@@ -209,11 +225,62 @@ class NewRouteFragment : Fragment(R.layout.fragment_new_route) {
         }
     }
 
-    private fun setupSingleSelect(
-        items: List<LinearLayout>,
-        defaultIndex: Int,
-        onSelected: (selectedLayoutId: Int) -> Unit
-    ) {
+    private fun enterManualStartMode() {
+        // overlay to capture taps
+        if (mapTapOverlay == null) {
+            mapTapOverlay = MapEventsOverlay(object : MapEventsReceiver {
+                override fun singleTapConfirmedHelper(p: GeoPoint?): Boolean {
+                    p?.let { setManualStart(it) }
+                    return true
+                }
+                override fun longPressHelper(p: GeoPoint?): Boolean {
+                    p?.let { setManualStart(it) }
+                    return true
+                }
+            })
+            mapView.overlays.add(0, mapTapOverlay)
+        }
+
+        if (startMarker == null) {
+            startMarker = Marker(mapView).apply {
+                title = "Start"
+                setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+                isDraggable = true
+                setOnMarkerDragListener(object : Marker.OnMarkerDragListener {
+                    override fun onMarkerDragStart(marker: Marker?) {}
+                    override fun onMarkerDrag(marker: Marker?) {}
+                    override fun onMarkerDragEnd(marker: Marker?) {
+                        marker?.position?.let { setManualStart(it) }
+                    }
+                })
+            }
+            mapView.overlays.add(startMarker)
+        }
+
+        if (startCenter == null) {
+            startCenter = mapView.mapCenter as GeoPoint
+            startMarker?.position = startCenter
+            mapView.invalidate()
+        }
+    }
+
+    private fun exitManualStartMode() {
+        mapTapOverlay?.let { mapView.overlays.remove(it) }
+        mapTapOverlay = null
+        startMarker?.let { mapView.overlays.remove(it) }
+        startMarker = null
+        mapView.invalidate()
+    }
+
+    private fun setManualStart(p: GeoPoint) {
+        startCenter = p
+        startMarker?.position = p
+        mapView.controller.animateTo(p)
+        requestRoute()
+    }
+
+
+    private fun setupSingleSelect(items: List<LinearLayout>, defaultIndex: Int, onSelected: (selectedLayoutId: Int) -> Unit) {
         var selectedIndex = defaultIndex.coerceIn(0, items.lastIndex)
         items.forEachIndexed { i, row ->
             setRowSelected(row, i == selectedIndex)
@@ -316,25 +383,13 @@ class NewRouteFragment : Fragment(R.layout.fragment_new_route) {
 
                 val simplified = withContext(Dispatchers.Default) { simplifyForMap(points).let { capPoints(it, 400) } }
 
-                previewPoints = simplified     // keep this for NavigatorFragment
+                previewPoints = simplified
                 lastProfile = profile
                 startRouteBtn.isEnabled = simplified.isNotEmpty()
-
-                // also put preview in cache for Navigator (instant draw)
-                val spec = RouteSpec(
-                    start = LatLngDto(center.latitude, center.longitude),
-                    lengthMeters = distanceKm * 1000,
-                    profile = profile,
-                    seed = seed,
-                    dir = selectedDir.name
-                )
-                RouteCache.put(spec, simplified.map { LatLngDto(it.latitude, it.longitude) })
 
                 drawPolyline(simplified)
 
                 Log.d("Route", "raw=${points.size}, simplified=${simplified.size}, lenKm=$distanceKm")
-
-                drawPolyline(points)
             } catch (e: CancellationException) {
             } catch (e: Exception) {
                 Toast.makeText(requireContext(), "Routing failed: ${e.message}", Toast.LENGTH_SHORT).show()
@@ -363,11 +418,7 @@ class NewRouteFragment : Fragment(R.layout.fragment_new_route) {
 
     // --- Polyline simplification & capping ---
 
-    private fun simplifyForMap(
-        points: List<GeoPoint>,
-        toleranceMeters: Double = 10.0,
-        maxPoints: Int = 400
-    ): List<GeoPoint> {
+    private fun simplifyForMap(points: List<GeoPoint>, toleranceMeters: Double = 10.0, maxPoints: Int = 400): List<GeoPoint> {
         if (points.size <= 2) return points
         val dp = douglasPeucker(points, toleranceMeters)
         return capPoints(dp, maxPoints)
