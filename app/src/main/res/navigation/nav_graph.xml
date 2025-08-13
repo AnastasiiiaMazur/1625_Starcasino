@@ -42,7 +42,7 @@
         tools:layout="@layout/fragment_settings" />
 
     <fragment
-        android:id="@+id/navigationFragment"
+        android:id="@+id/navigatorFragment"
         android:name="com.stcs.oon.fragments.extra.NavigatorFragment"
         android:label="Navigation"
         tools:layout="@layout/fragment_navigator" />

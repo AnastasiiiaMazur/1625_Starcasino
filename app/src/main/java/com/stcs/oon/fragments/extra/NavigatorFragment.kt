@@ -1,6 +1,8 @@
 package com.stcs.oon.fragments.extra
 
+import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import android.view.View
 import androidx.fragment.app.Fragment
 import com.stcs.oon.R
@@ -15,34 +17,43 @@ import org.osmdroid.util.BoundingBox
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Polyline
-import org.osmdroid.views.overlay.mylocation.MyLocationNewOverlay
-import com.stcs.oon.fragments.helpers.LocationKit
 import com.stcs.oon.db.RouteSessionViewModel
-import com.stcs.oon.db.LatLngDto
-import com.stcs.oon.db.AppDatabase
-import com.stcs.oon.db.RideEntity
-import com.google.gson.Gson
 import kotlin.math.*
+import androidx.navigation.fragment.findNavController
+import com.stcs.oon.db.LatLngDto
+import com.stcs.oon.db.RouteSpec
+import kotlinx.coroutines.*
+import com.stcs.oon.fragments.helpers.OrsClient
+import com.stcs.oon.fragments.helpers.OrsDirectionsBody
+import com.stcs.oon.fragments.helpers.OrsOptions
+import com.stcs.oon.fragments.helpers.OrsRoundTrip
+
 
 class NavigatorFragment : Fragment(R.layout.fragment_navigator) {
 
     private val session: RouteSessionViewModel by activityViewModels()
+    private val ors by lazy { OrsClient.create(logging = false) }
 
     private lateinit var mapView: MapView
-    private var myLocationOverlay: MyLocationNewOverlay? = null
-    private var routePolyline: Polyline? = null
-
     private lateinit var distanceTv: TextView
     private lateinit var timeTv: TextView
     private lateinit var difficultyTv: TextView
     private lateinit var startNavBtn: TextView
     private lateinit var saveRouteBtn: TextView
 
-    private var navStartedAtMs: Long? = null
+    private var routePolyline: Polyline? = null
+    private var fetchJob: Job? = null
+
+    companion object {
+        private const val ARG_ROUTE_SPEC = "arg_route_spec"
+    }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
+        Log.d("NAV", "Navigator onViewCreated")
+
+        // IDs you mentioned
         mapView = view.findViewById(R.id.map)
         distanceTv = view.findViewById(R.id.distance)
         timeTv = view.findViewById(R.id.time)
@@ -60,122 +71,159 @@ class NavigatorFragment : Fragment(R.layout.fragment_navigator) {
         mapView.setMultiTouchControls(true)
         mapView.setTileSource(TileSourceFactory.MAPNIK)
 
-//        val draft = session.draft
-//        if (draft == null) {
-//            Toast.makeText(requireContext(), "No route draft.", Toast.LENGTH_SHORT).show()
-//            return
-//        }
+        // 1) Get the tiny spec from the shared VM
 
-        // draw the same route
-//        val points = draft.points.map { GeoPoint(it.lat, it.lon) }
-//        drawPolyline(points)
-//
-//        // fill quick header info
-//        distanceTv.text = "${draft.lengthMeters / 1000} km"
-//        timeTv.text = "~${estimateTimeText(draft.lengthMeters)}"
-//        difficultyTv.text = "—/5"
-//
-//        // follow-location overlay (dot). We'll enable on "Start navigation"
-//        myLocationOverlay = LocationKit.attachMyLocationOverlay(
-//            mapView = mapView,
-//            context = requireContext(),
-//            follow = false
-//        )
-//        mapView.overlays.add(myLocationOverlay)
-//
-//        // Start navigation: start timer + follow user
-//        startNavBtn.setOnClickListener {
-//            if (navStartedAtMs == null) {
-//                navStartedAtMs = System.currentTimeMillis()
-//                myLocationOverlay?.enableFollowLocation()
-//                startNavBtn.text = "STOP NAVIGATION"
-//            } else {
-//                myLocationOverlay?.disableFollowLocation()
-//                navStartedAtMs = null
-//                startNavBtn.text = "START NAVIGATION"
-//            }
-//        }
-//
-//        // Save ride
-//        saveRouteBtn.setOnClickListener {
-//            saveRide(draft)
-//        }
+        val spec: RouteSpec? = if (Build.VERSION.SDK_INT >= 33) {
+            requireArguments().getParcelable(ARG_ROUTE_SPEC, RouteSpec::class.java)
+        } else {
+            @Suppress("DEPRECATION")
+            requireArguments().getParcelable(ARG_ROUTE_SPEC)
+        }
+        if (spec == null) {
+            Toast.makeText(requireContext(), "No route spec.", Toast.LENGTH_SHORT).show()
+            findNavController().popBackStack()
+            return
+        }
+
+        // Fill header from the spec (quick estimate)
+        distanceTv.text = "${(spec.lengthMeters / 1000.0).roundToInt()} km"
+        timeTv.text = "~" + estimateTimeText(spec.lengthMeters)
+        difficultyTv.text = "—/5"
+
+        fetchJob?.cancel()
+        fetchJob = viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val pts = fetchRouteForSpec(spec)        // background
+                drawPolyline(pts.map { GeoPoint(it.lat, it.lon) })
+            } catch (e: Exception) {
+                Toast.makeText(requireContext(), "Routing failed: ${e.message}", Toast.LENGTH_LONG).show()
+            }
+        }
+
+        // (Hook up Start/Save later — keep UI responsive while we finish the drawing path)
     }
 
-//    private fun drawPolyline(points: List<GeoPoint>) {
-//        routePolyline?.let { mapView.overlays.remove(it) }
-//        routePolyline = null
-//        if (points.isEmpty()) { mapView.invalidate(); return }
-//
-//        routePolyline = Polyline().apply {
-//            setPoints(points)
-//            outlinePaint.strokeWidth = 6f
-//            outlinePaint.color = 0xFFE53935.toInt()
-//        }
-//        mapView.overlays.add(routePolyline)
-//
-//        val bbox: BoundingBox = BoundingBox.fromGeoPointsSafe(points)
-//        mapView.zoomToBoundingBox(bbox, true, 80)
-//        mapView.invalidate()
-//    }
-//
-//    private fun estimateTimeText(distanceMeters: Int): String {
-//        // very rough: 15 km/h cycling
-//        val hours = distanceMeters / 1000.0 / 15.0
-//        val h = floor(hours).toInt()
-//        val m = ((hours - h) * 60).roundToInt()
-//        return if (h > 0) "${h} h ${m} min" else "$m min"
-//    }
-//
-//    private fun saveRide(draft: com.stcs.oon.db.RouteDraft) {
-//        val startMs = navStartedAtMs ?: System.currentTimeMillis() // if they never pressed start, assume now
-//        val durationSec = max(1L, (System.currentTimeMillis() - startMs) / 1000)
-//
-//        // Distance from draft.start to current user position (straight line as requested)
-//        val current = myLocationOverlay?.myLocation
-//        val distanceMeters = if (current != null) {
-//            haversineMeters(draft.start.lat, draft.start.lon, current.latitude, current.longitude).roundToInt()
-//        } else {
-//            0
-//        }
-//
-//        val speedMps = if (durationSec > 0) distanceMeters.toDouble() / durationSec else 0.0
-//
-//        val polylineJson = Gson().toJson(draft.points) // store the exact route
-//
-//        viewLifecycleOwner.lifecycleScope.launch {
-//            val dao = AppDatabase.get(requireContext()).rideDao()
-//            // insert first
-//            val id = dao.insert(
-//                RideEntity(
-//                    name = "", // fill after we get id
-//                    polylineJson = polylineJson,
-//                    distanceMeters = distanceMeters,
-//                    durationSeconds = durationSec,
-//                    avgSpeedMps = speedMps,
-//                    difficulty = null, // later
-//                    description = ""
-//                )
+    override fun onDestroyView() {
+        fetchJob?.cancel()
+        routePolyline = null
+        super.onDestroyView()
+    }
+
+    // ---------- ORS fetch from spec ----------
+//    private suspend fun fetchRouteForSpec(spec: RouteSpec): List<LatLngDto> = withContext(Dispatchers.IO) {
+//        val body = OrsDirectionsBody(
+//            coordinates = listOf(listOf(spec.start.lon, spec.start.lat)),
+//            options = OrsOptions(
+//                roundTrip = OrsRoundTrip(length = spec.lengthMeters, seed = spec.seed)
 //            )
-//            // update name = "Route {id}"
-//            dao.updateName(id, "Route $id")
-//            Toast.makeText(requireContext(), "Ride saved as Route $id", Toast.LENGTH_LONG).show()
-//        }
-//    }
+//        )
 //
-//    private fun haversineMeters(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
-//        val R = 6371000.0
-//        val dLat = Math.toRadians(lat2 - lat1)
-//        val dLon = Math.toRadians(lon2 - lon1)
-//        val a = sin(dLat/2).pow(2.0) + cos(Math.toRadians(lat1)) * cos(Math.toRadians(lat2)) * sin(dLon/2).pow(2.0)
-//        val c = 2 * atan2(sqrt(a), sqrt(1-a))
-//        return R * c
-//    }
+//        val resp = ors.routeGeoJson(getString(R.string.ors_api_key), spec.profile, body)
+//        var coords = resp.features.firstOrNull()?.geometry?.coordinates.orEmpty()
+//        var geo = coords.map { ll -> GeoPoint(ll[1], ll[0]) }
 //
-//    override fun onDestroyView() {
-//        myLocationOverlay?.disableMyLocation()
-//        myLocationOverlay = null
-//        routePolyline = null
-//        super.onDestroyView()
+//        if (spec.dir == "COUNTERCLOCKWISE") geo = geo.asReversed()
+//
+//        val simplified = withContext(Dispatchers.Default) { simplifyForMap(geo) }
+//        return@withContext simplified.map { LatLngDto(it.latitude, it.longitude) }
 //    }
+
+    private suspend fun fetchRouteForSpec(spec: RouteSpec): List<LatLngDto> = withContext(Dispatchers.IO) {
+        val body = OrsDirectionsBody(
+            coordinates = listOf(listOf(spec.start.lon, spec.start.lat)),  // [lon, lat]
+            options = OrsOptions(
+                roundTrip = OrsRoundTrip(
+                    length = spec.lengthMeters.coerceIn(1_000, 150_000),
+                    points = 5,
+                    seed = spec.seed
+                )
+            ),
+            instructions = false,
+            elevation = false,
+            geometrySimplify = true
+        )
+        val resp = ors.routeGeoJson(getString(R.string.ors_api_key), spec.profile, body)
+
+        var geo = resp.features.firstOrNull()?.geometry?.coordinates.orEmpty()
+            .map { (lon, lat) -> GeoPoint(lat, lon) }
+
+        if (spec.dir == "COUNTERCLOCKWISE") geo = geo.asReversed()
+
+        val simplified = withContext(Dispatchers.Default) { simplifyForMap(geo) }
+        simplified.map { LatLngDto(it.latitude, it.longitude) }
+    }
+
+    // ---------- Draw ----------
+    private fun drawPolyline(points: List<GeoPoint>) {
+        routePolyline?.let { mapView.overlays.remove(it) }
+        routePolyline = null
+        if (points.isEmpty()) { mapView.invalidate(); return }
+
+        routePolyline = Polyline().apply {
+            setPoints(points)
+            outlinePaint.strokeWidth = 6f
+            outlinePaint.color = 0xFFE53935.toInt()
+        }
+        mapView.overlays.add(routePolyline)
+        val bbox: BoundingBox = BoundingBox.fromGeoPointsSafe(points)
+        mapView.zoomToBoundingBox(bbox, true, 80)
+        mapView.invalidate()
+    }
+
+    // ---------- Helpers ----------
+    private fun estimateTimeText(distanceMeters: Int): String {
+        val hours = distanceMeters / 1000.0 / 15.0
+        val h = floor(hours).toInt()
+        val m = ((hours - h) * 60).roundToInt()
+        return if (h > 0) "${h} h ${m} min" else "$m min"
+    }
+
+    private fun simplifyForMap(points: List<GeoPoint>, toleranceMeters: Double = 10.0, maxPoints: Int = 400): List<GeoPoint> {
+        if (points.size <= 2) return points
+        val dp = douglasPeucker(points, toleranceMeters)
+        return capPoints(dp, maxPoints)
+    }
+
+    private fun capPoints(points: List<GeoPoint>, maxPoints: Int): List<GeoPoint> {
+        if (points.size <= maxPoints) return points
+        val step = ceil(points.size / maxPoints.toDouble()).toInt()
+        val out = ArrayList<GeoPoint>((points.size / step) + 1)
+        for (i in points.indices step step) out.add(points[i])
+        if (out.last() != points.last()) out.add(points.last())
+        return out
+    }
+
+    private fun douglasPeucker(points: List<GeoPoint>, toleranceMeters: Double): List<GeoPoint> {
+        val n = points.size
+        if (n < 3) return points
+        val keep = BooleanArray(n).apply { this[0] = true; this[n - 1] = true }
+        val refLat = points.first().latitude
+        val mPerDegLat = 111_320.0
+        val mPerDegLon = 111_320.0 * cos(Math.toRadians(refLat))
+        fun toXY(p: GeoPoint) = Pair(p.longitude * mPerDegLon, p.latitude * mPerDegLat)
+        val xy = points.map { toXY(it) }
+        fun perpDist(i: Int, a: Int, b: Int): Double {
+            val (x, y) = xy[i]; val (x1, y1) = xy[a]; val (x2, y2) = xy[b]
+            if (x1 == x2 && y1 == y2) return hypot(x - x1, y - y1)
+            val dx = x2 - x1; val dy = y2 - y1
+            val t = ((x - x1) * dx + (y - y1) * dy) / (dx*dx + dy*dy)
+            val tc = t.coerceIn(0.0, 1.0)
+            val px = x1 + tc * dx; val py = y1 + tc * dy
+            return hypot(x - px, y - py)
+        }
+        fun rec(a: Int, b: Int) {
+            var maxD = 0.0; var idx = -1
+            for (i in a + 1 until b) {
+                val d = perpDist(i, a, b)
+                if (d > maxD) { maxD = d; idx = i }
+            }
+            if (maxD > toleranceMeters && idx != -1) { keep[idx] = true; rec(a, idx); rec(idx, b) }
+        }
+        rec(0, n - 1)
+        val out = ArrayList<GeoPoint>()
+        for (i in 0 until n) if (keep[i]) out.add(points[i])
+        return out
+    }
 }
+
+

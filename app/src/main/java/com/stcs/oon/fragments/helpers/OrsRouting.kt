@@ -8,17 +8,23 @@ import retrofit2.converter.gson.GsonConverterFactory
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 
-// ---- Request ----
+
+data class OrsRoundTrip(
+    @SerializedName("length") val length: Int,
+    @SerializedName("points") val points: Int = 5,
+    @SerializedName("seed")   val seed: Int = 1
+)
+
 data class OrsOptions(
     @SerializedName("round_trip") val roundTrip: OrsRoundTrip? = null
 )
-data class OrsRoundTrip(
-    val length: Int,      // meters
-    val seed: Int? = null // vary shape (we'll use for "Random")
-)
+
 data class OrsDirectionsBody(
-    val coordinates: List<List<Double>>, // [[lon, lat]] only start for roundtrip
-    val options: OrsOptions? = null
+    @SerializedName("coordinates")        val coordinates: List<List<Double>>,
+    @SerializedName("options")            val options: OrsOptions? = null,
+    @SerializedName("instructions")       val instructions: Boolean = false,
+    @SerializedName("elevation")          val elevation: Boolean = false,
+    @SerializedName("geometry_simplify")  val geometrySimplify: Boolean = true
 )
 
 // ---- Response (GeoJSON) ----
@@ -49,6 +55,8 @@ interface OrsService {
         @Body body: OrsDirectionsBody
     ): OrsGeoJsonResponse
 }
+
+
 
 // ---- Factory ----
 object OrsClient {

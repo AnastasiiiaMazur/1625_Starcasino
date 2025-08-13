@@ -11,13 +11,13 @@ import android.widget.PopupWindow
 import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.Toast
+import androidx.core.os.bundleOf
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.fragment.findNavController
 import com.stcs.oon.R
 import com.stcs.oon.db.LatLngDto
-import com.stcs.oon.db.RouteDraft
 import kotlinx.coroutines.Job
 import org.osmdroid.config.Configuration
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
@@ -31,24 +31,25 @@ import com.stcs.oon.fragments.helpers.LocationKit
 import com.stcs.oon.fragments.helpers.LocationPermissionRequester
 import kotlinx.coroutines.*
 import com.stcs.oon.db.RouteSessionViewModel
+import com.stcs.oon.db.RouteSpec
+import com.stcs.oon.fragments.extra.RouteCache
+import kotlin.math.cos
+import kotlin.math.hypot
+import com.stcs.oon.fragments.helpers.OrsOptions
 
 
 class NewRouteFragment : Fragment(R.layout.fragment_new_route) {
 
-    // ----- Views -----
+    // Views
     private lateinit var kmSeekBar: SeekBar
-
     private lateinit var startLocation: LinearLayout
     private lateinit var startManualLocation: LinearLayout
-
     private lateinit var twistyRoute: LinearLayout
     private lateinit var scenicRoute: LinearLayout
     private lateinit var flatRoute: LinearLayout
-
     private lateinit var clockwiseRoute: LinearLayout
     private lateinit var counterclockwiseRoute: LinearLayout
     private lateinit var randomRoute: LinearLayout
-
     private lateinit var startRouteBtn: TextView
 
     // Map + location
@@ -79,11 +80,14 @@ class NewRouteFragment : Fragment(R.layout.fragment_new_route) {
     private var routeJob: Job? = null
     private var randomSeed = 1
 
-
-
     private val routeSession: RouteSessionViewModel by activityViewModels()
 
-    private var lastRoutePoints: List<GeoPoint> = emptyList()
+    companion object {
+        private const val ARG_ROUTE_SPEC = "arg_route_spec"
+    }
+
+
+    private var previewPoints: List<GeoPoint> = emptyList()
     private var lastProfile: String = "cycling-regular"
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
@@ -115,36 +119,56 @@ class NewRouteFragment : Fragment(R.layout.fragment_new_route) {
         setupUiGroups()
         setupKmSeekbar()
 
-
+//        startRouteBtn.setOnClickListener {
+//            val center = startCenter ?: return@setOnClickListener
+//            val profile = when (selectedType) {
+//                RouteType.SCENIC -> "cycling-regular"
+//                RouteType.FLAT -> "cycling-road"
+//                RouteType.TWISTY -> "cycling-mountain"
+//            }
+//            val seed = if (selectedDir == Direction.RANDOM) randomSeed else 1
+//            val spec = RouteSpec(
+//                start = LatLngDto(center.latitude, center.longitude),
+//                lengthMeters = distanceKm * 1000,
+//                profile = profile,
+//                seed = seed,
+//                dir = selectedDir.name
+//            )
+//            if (previewPoints.isNotEmpty()) {
+//                RouteCache.put(spec, previewPoints.map { LatLngDto(it.latitude, it.longitude) })
+//            }
+//            routeSession.spec = spec
+//            findNavController().navigate(R.id.navigatorFragment)
+//        }
 
         startRouteBtn.setOnClickListener {
+            Log.d("NAV", "Start tapped")
             val center = startCenter ?: return@setOnClickListener
-            val pts = lastRoutePoints
-            if (pts.isEmpty()) return@setOnClickListener
 
-            // prevent double taps
-            startRouteBtn.isEnabled = false
-
-            viewLifecycleOwner.lifecycleScope.launchWhenStarted {
-                // Build the draft off the main thread
-                val draft = withContext(Dispatchers.Default) {
-                    // Ensure points are already simplified & capped (<= 500)
-                    val simplified = simplifyForMap(pts).let { capPoints(it, 400) }
-
-                    RouteDraft(
-                        points = simplified.map { LatLngDto(it.latitude, it.longitude) },
-                        lengthMeters = distanceKm * 1000,
-                        profile = lastProfile,
-                        seed = if (selectedDir.name == "RANDOM") randomSeed else 1,
-                        start = LatLngDto(center.latitude, center.longitude)
-                    )
-                }
-
-                routeSession.draft = draft
-                startRouteBtn.isEnabled = true
-                findNavController().navigate(R.id.navigationFragment) // <-- no args
+            val profile = when (selectedType) {
+                RouteType.SCENIC -> "cycling-regular"
+                RouteType.FLAT   -> "cycling-road"
+                RouteType.TWISTY -> "cycling-mountain"
             }
+            val seed = if (selectedDir == Direction.RANDOM) randomSeed else 1
+
+            val spec = RouteSpec(
+                start = LatLngDto(center.latitude, center.longitude),
+                lengthMeters = distanceKm * 1000,
+                profile = profile,
+                seed = seed,
+                dir = selectedDir.name
+            )
+
+            // Cancel any ongoing routing work and map following before navigating
+            routeJob?.cancel()
+            myLocationOverlay?.disableFollowLocation()
+
+            val args = android.os.Bundle().apply { putParcelable(ARG_ROUTE_SPEC, spec) }
+            findNavController().navigate(R.id.navigatorFragment, args)
         }
+
+
 
 
         locationRequester = LocationPermissionRequester(
@@ -174,7 +198,6 @@ class NewRouteFragment : Fragment(R.layout.fragment_new_route) {
                 else Toast.makeText(requireContext(), "Location permission is needed for My Location.", Toast.LENGTH_LONG).show()
             }
         )
-
         locationRequester.request()
     }
 
@@ -189,13 +212,12 @@ class NewRouteFragment : Fragment(R.layout.fragment_new_route) {
 
     // ----- UI groups -----
     private fun setupUiGroups() {
-        setupSingleSelect(listOf(startLocation, startManualLocation), defaultIndex = 0) { id ->
-            selectedStart = if (id == R.id.startLocation) StartOption.MY_LOCATION else StartOption.MANUAL
-            // TODO: when MANUAL, set startCenter from a map tap/long-press
+        setupSingleSelect(listOf(startLocation, startManualLocation), 0) { id ->
+            selectedStart =
+                if (id == R.id.startLocation) StartOption.MY_LOCATION else StartOption.MANUAL
             requestRoute()
         }
-
-        setupSingleSelect(listOf(twistyRoute, scenicRoute, flatRoute), defaultIndex = 0) { id ->
+        setupSingleSelect(listOf(twistyRoute, scenicRoute, flatRoute), 0) { id ->
             selectedType = when (id) {
                 R.id.twistyRoute -> RouteType.TWISTY
                 R.id.scenicRoute -> RouteType.SCENIC
@@ -203,8 +225,7 @@ class NewRouteFragment : Fragment(R.layout.fragment_new_route) {
             }
             requestRoute()
         }
-
-        setupSingleSelect(listOf(clockwiseRoute, counterclockwiseRoute, randomRoute), defaultIndex = 0) { id ->
+        setupSingleSelect(listOf(clockwiseRoute, counterclockwiseRoute, randomRoute), 0) { id ->
             selectedDir = when (id) {
                 R.id.clockwiseRoute -> Direction.CLOCKWISE
                 R.id.counterclockwiseRoute -> Direction.COUNTERCLOCKWISE
@@ -287,7 +308,6 @@ class NewRouteFragment : Fragment(R.layout.fragment_new_route) {
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
-    // ----- Routing (real streets via ORS round_trip) -----
     private fun requestRoute(debounce: Boolean = false) {
         val center = startCenter ?: return
         if (distanceKm <= 0) { drawPolyline(emptyList()); return }
@@ -323,13 +343,19 @@ class NewRouteFragment : Fragment(R.layout.fragment_new_route) {
 
                 val simplified = withContext(Dispatchers.Default) { simplifyForMap(points).let { capPoints(it, 400) } }
 
-//                val simplified = withContext(Dispatchers.Default) {
-//                    simplifyForMap(points)
-//                }
-
-                lastRoutePoints = simplified     // keep this for NavigatorFragment
+                previewPoints = simplified     // keep this for NavigatorFragment
                 lastProfile = profile
                 startRouteBtn.isEnabled = simplified.isNotEmpty()
+
+                // also put preview in cache for Navigator (instant draw)
+                val spec = RouteSpec(
+                    start = LatLngDto(center.latitude, center.longitude),
+                    lengthMeters = distanceKm * 1000,
+                    profile = profile,
+                    seed = seed,
+                    dir = selectedDir.name
+                )
+                RouteCache.put(spec, simplified.map { LatLngDto(it.latitude, it.longitude) })
 
                 drawPolyline(simplified)
 
@@ -364,11 +390,14 @@ class NewRouteFragment : Fragment(R.layout.fragment_new_route) {
 
     // --- Polyline simplification & capping ---
 
-    private fun simplifyForMap(points: List<GeoPoint>): List<GeoPoint> {
+    private fun simplifyForMap(
+        points: List<GeoPoint>,
+        toleranceMeters: Double = 10.0,
+        maxPoints: Int = 400
+    ): List<GeoPoint> {
         if (points.size <= 2) return points
-        // 10 m tolerance is usually plenty; tweak as needed.
-        val dp = douglasPeucker(points, toleranceMeters = 10.0)
-        return capPoints(dp, maxPoints = 500) // keep at most 500 for snappy UI
+        val dp = douglasPeucker(points, toleranceMeters)
+        return capPoints(dp, maxPoints)
     }
 
     private fun capPoints(points: List<GeoPoint>, maxPoints: Int): List<GeoPoint> {
@@ -433,3 +462,5 @@ class NewRouteFragment : Fragment(R.layout.fragment_new_route) {
     }
 
 }
+
+
