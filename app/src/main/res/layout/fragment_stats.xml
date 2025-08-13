@@ -23,6 +23,7 @@
         android:layout_gravity="end">
 
         <TextView
+            android:id="@+id/dayView"
             android:layout_width="0dp"
             android:layout_weight="1"
             android:layout_height="wrap_content"
@@ -35,6 +36,7 @@
             android:gravity="center"/>
 
         <TextView
+            android:id="@+id/weekView"
             android:layout_width="0dp"
             android:layout_weight="1"
             android:layout_height="wrap_content"
@@ -48,6 +50,7 @@
             android:gravity="center"/>
 
         <TextView
+            android:id="@+id/monthView"
             android:layout_width="0dp"
             android:layout_weight="1"
             android:layout_height="wrap_content"
@@ -61,6 +64,7 @@
             android:gravity="center"/>
 
         <TextView
+            android:id="@+id/allView"
             android:layout_width="0dp"
             android:layout_weight="1"
             android:layout_height="wrap_content"
@@ -74,6 +78,7 @@
     </LinearLayout>
 
     <TextView
+        android:id="@+id/totalDistance"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="10dp"
@@ -91,6 +96,7 @@
         android:layout_marginTop="10dp"/>
 
     <TextView
+        android:id="@+id/totalTime"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="10dp"
@@ -108,6 +114,7 @@
         android:layout_marginTop="10dp"/>
 
     <TextView
+        android:id="@+id/averageSpeed"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="10dp"
@@ -118,6 +125,7 @@
         android:fontFamily="@font/montserrat_regular"/>
 
     <TextView
+        android:id="@+id/mostActiveDays"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="10dp"
@@ -128,6 +136,7 @@
         android:fontFamily="@font/montserrat_regular"/>
 
     <TextView
+        android:id="@+id/longestRide"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="10dp"
@@ -138,6 +147,7 @@
         android:fontFamily="@font/montserrat_regular"/>
 
     <TextView
+        android:id="@+id/totalRides"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="10dp"

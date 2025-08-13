@@ -197,7 +197,8 @@ class NavigatorFragment : Fragment(R.layout.fragment_navigator) {
             avgSpeedKmh = null,
             difficulty = difficulty,
             description = null,
-            rating = null
+            rating = null,
+            createdAt = System.currentTimeMillis()
         )
 
         viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {

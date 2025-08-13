@@ -2,8 +2,10 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:orientation="horizontal"
     android:padding="10dp"
+    android:layout_marginBottom="10dp"
     android:background="@drawable/basic_button">
 
     <LinearLayout
@@ -14,6 +16,7 @@
         android:layout_marginEnd="20dp">
 
         <TextView
+            android:id="@+id/rideTitle"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:textSize="20sp"
@@ -22,6 +25,7 @@
             android:fontFamily="@font/montserrat_bold"/>
 
         <TextView
+            android:id="@+id/rideDate"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:textSize="16sp"
@@ -30,6 +34,7 @@
             android:fontFamily="@font/montserrat_regular"/>
 
         <TextView
+            android:id="@+id/rideDistance"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:textSize="16sp"
@@ -44,6 +49,7 @@
             android:layout_marginTop="10dp">
 
             <TextView
+                android:id="@+id/view"
                 android:layout_width="0dp"
                 android:layout_weight="1"
                 android:layout_height="wrap_content"
@@ -57,6 +63,7 @@
                 android:gravity="center"/>
 
             <TextView
+                android:id="@+id/delete"
                 android:layout_width="0dp"
                 android:layout_weight="1"
                 android:layout_height="wrap_content"
@@ -74,13 +81,17 @@
 
     </LinearLayout>
 
-    <ImageView
+    <com.google.android.material.card.MaterialCardView
         android:layout_width="0dp"
         android:layout_weight="1"
         android:layout_height="match_parent"
-        android:src="@drawable/map_placeholder"
-        android:scaleType="centerCrop"
-        android:background="@drawable/nav_button_back"
-        android:clipToOutline="true"/>
+        app:cardCornerRadius="15dp"
+        app:cardUseCompatPadding="true">
+
+        <org.osmdroid.views.MapView
+            android:id="@+id/mapView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"/>
+    </com.google.android.material.card.MaterialCardView>
 
 </LinearLayout>

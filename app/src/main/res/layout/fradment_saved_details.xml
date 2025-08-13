@@ -2,6 +2,7 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:orientation="vertical">
 
     <TextView
@@ -14,16 +15,19 @@
         android:fontFamily="@font/montserrat_regular"
         android:layout_gravity="center"/>
 
-    <ImageView
-        android:id="@+id/map"
+    <com.google.android.material.card.MaterialCardView
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="200dp"
         android:layout_marginHorizontal="20dp"
         android:layout_marginTop="10dp"
-        android:src="@drawable/map_placeholder"
-        android:scaleType="centerCrop"
-        android:background="@drawable/nav_button_back"
-        android:clipToOutline="true"/>
+        app:cardCornerRadius="15dp"
+        app:cardUseCompatPadding="true">
+
+        <org.osmdroid.views.MapView
+            android:id="@+id/mapView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"/>
+    </com.google.android.material.card.MaterialCardView>
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -88,29 +92,32 @@
         android:layout_marginTop="10dp">
 
         <ImageView
+            android:id="@+id/im1"
             android:layout_width="0dp"
             android:layout_weight="1"
             android:layout_height="match_parent"
-            android:src="@drawable/map_placeholder"
+            android:src="@drawable/ic_camera"
             android:scaleType="centerCrop"
             android:background="@drawable/nav_button_back"
             android:clipToOutline="true"/>
 
         <ImageView
+            android:id="@+id/im2"
             android:layout_width="0dp"
             android:layout_weight="1"
             android:layout_height="match_parent"
-            android:src="@drawable/map_placeholder"
+            android:src="@drawable/ic_camera"
             android:scaleType="centerCrop"
             android:layout_marginHorizontal="10dp"
             android:background="@drawable/nav_button_back"
             android:clipToOutline="true"/>
 
         <ImageView
+            android:id="@+id/im3"
             android:layout_width="0dp"
             android:layout_weight="1"
             android:layout_height="match_parent"
-            android:src="@drawable/map_placeholder"
+            android:src="@drawable/ic_camera"
             android:scaleType="centerCrop"
             android:background="@drawable/nav_button_back"
             android:clipToOutline="true"/>
