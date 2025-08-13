@@ -36,6 +36,12 @@
         tools:layout="@layout/fragment_saved_routes" />
 
     <fragment
+        android:id="@+id/savedRoutesDetailsFragment"
+        android:name="com.stcs.oon.fragments.extra.SavedDetailsFragment"
+        android:label="Saved Routes Details"
+        tools:layout="@layout/fradment_saved_details" />
+
+    <fragment
         android:id="@+id/settingsFragment"
         android:name="com.stcs.oon.fragments.SettingsFragment"
         android:label="Settings"

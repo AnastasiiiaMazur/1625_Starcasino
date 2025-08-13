@@ -7,6 +7,9 @@ import androidx.fragment.app.Fragment
 import com.stcs.oon.R
 import org.osmdroid.views.MapView
 import android.app.AlertDialog
+import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
+import android.view.ViewGroup
 import android.widget.TextView
 import android.widget.Toast
 import androidx.core.os.bundleOf
@@ -102,27 +105,24 @@ class SavedRoutesFragment: Fragment(R.layout.fragment_saved_routes) {
                     dir = ride.specDir
                 )
                 val args = bundleOf(ARG_ROUTE_SPEC to spec)
-                findNavController().navigate(R.id.navigatorFragment, args)
+                findNavController().navigate(R.id.savedRoutesDetailsFragment, args)
             }
 
-            // DELETE -> confirm, then remove
             delBtn.setOnClickListener {
-                AlertDialog.Builder(requireContext())
-                    .setTitle("Delete ride")
-                    .setMessage("Are you sure you want to delete \"${titleTv.text}\"?")
-                    .setPositiveButton("Delete") { _, _ ->
-                        viewLifecycleOwner.lifecycleScope.launch {
-                            withContext(Dispatchers.IO) {
-                                AppDatabase.getInstance(requireContext()).rideDao().delete(ride.id)
+                showConfirmDeleteDialog(
+                    onYes = {
+                        viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
+                            AppDatabase.getInstance(requireContext()).rideDao().delete(ride.id)
+                            withContext(Dispatchers.Main) {
+                                Toast.makeText(requireContext(), "Deleted", Toast.LENGTH_SHORT).show()
+                                ridesContainer.removeView(item)
                             }
-                            Toast.makeText(requireContext(), "Deleted", Toast.LENGTH_SHORT).show()
-                            ridesContainer.removeView(item)
-                            mapViews.remove(map)
                         }
-                    }
-                    .setNegativeButton("Cancel", null)
-                    .show()
+                    },
+                    onNo = { /* optional: do nothing */ }
+                )
             }
+
 
             ridesContainer.addView(item)
         }
@@ -155,10 +155,38 @@ class SavedRoutesFragment: Fragment(R.layout.fragment_saved_routes) {
         return if (h > 0) "${h}h ${m}m" else "${m}m"
     }
 
-    private fun formatRideDate(epochMillis: Long, longMonth: Boolean = true): String {
+    private fun formatRideDate(epochMillis: Long, longMonth: Boolean = false): String {
         val pattern = if (longMonth) "d MMMM yyyy" else "d MMM yyyy"
         val sdf = java.text.SimpleDateFormat(pattern, java.util.Locale.getDefault())
         return sdf.format(java.util.Date(epochMillis))
+    }
+
+
+    private fun showConfirmDeleteDialog(
+        onYes: () -> Unit,
+        onNo: (() -> Unit)? = null
+    ) {
+        val dialogView = layoutInflater.inflate(R.layout.custom_alert_dialog, null)
+
+        val dialog = AlertDialog.Builder(requireContext())
+            .setView(dialogView)
+            .setCancelable(true)
+            .create()
+
+        dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+        dialog.show()
+
+        dialogView.findViewById<TextView>(R.id.message).setText(R.string.delete_string)
+
+        dialogView.findViewById<TextView>(R.id.yes).setOnClickListener {
+            dialog.dismiss()
+            onYes()
+        }
+        dialogView.findViewById<TextView>(R.id.no).setOnClickListener {
+            dialog.dismiss()
+            onNo?.invoke()
+        }
+
     }
 
     private fun insertDummyRide() {

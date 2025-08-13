@@ -136,4 +136,41 @@
         android:paddingHorizontal="25dp"
         android:layout_gravity="center"/>
 
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginHorizontal="50dp"
+        android:layout_marginTop="15dp">
+
+        <TextView
+            android:id="@+id/yes"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="5dp"
+            android:background="@drawable/button_outline_black"
+            android:paddingVertical="4dp"
+            android:textColor="@color/black"
+            android:textSize="14sp"
+            android:fontFamily="@font/montserrat_regular"
+            android:text="EDIT"
+            android:gravity="center"/>
+
+        <TextView
+            android:id="@+id/no"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="5dp"
+            android:background="@drawable/button_outline_black"
+            android:paddingVertical="4dp"
+            android:textColor="@color/black"
+            android:textSize="14sp"
+            android:fontFamily="@font/montserrat_regular"
+            android:text="DELETE"
+            android:gravity="center"/>
+
+    </LinearLayout>
+
 </LinearLayout>

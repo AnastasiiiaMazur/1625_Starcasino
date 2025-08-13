@@ -18,4 +18,5 @@
     <string name="your_ride_route">Your Ride Route</string>
     <string name="stop_navigation">STOP NAVIGATION</string>
     <string name="start_navigation">START NAVIGATION</string>
+    <string name="delete_string">Are you sure you want to delete this trip?</string>
 </resources>
