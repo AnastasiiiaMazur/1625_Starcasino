@@ -17,7 +17,6 @@ import org.osmdroid.util.BoundingBox
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Polyline
-import com.stcs.oon.db.RouteSessionViewModel
 import kotlin.math.*
 import androidx.navigation.fragment.findNavController
 import com.stcs.oon.db.LatLngDto
@@ -31,7 +30,6 @@ import com.stcs.oon.fragments.helpers.OrsRoundTrip
 
 class NavigatorFragment : Fragment(R.layout.fragment_navigator) {
 
-    private val session: RouteSessionViewModel by activityViewModels()
     private val ors by lazy { OrsClient.create(logging = false) }
 
     private lateinit var mapView: MapView
@@ -71,8 +69,6 @@ class NavigatorFragment : Fragment(R.layout.fragment_navigator) {
         mapView.setMultiTouchControls(true)
         mapView.setTileSource(TileSourceFactory.MAPNIK)
 
-        // 1) Get the tiny spec from the shared VM
-
         val spec: RouteSpec? = if (Build.VERSION.SDK_INT >= 33) {
             requireArguments().getParcelable(ARG_ROUTE_SPEC, RouteSpec::class.java)
         } else {
@@ -85,10 +81,9 @@ class NavigatorFragment : Fragment(R.layout.fragment_navigator) {
             return
         }
 
-        // Fill header from the spec (quick estimate)
         distanceTv.text = "${(spec.lengthMeters / 1000.0).roundToInt()} km"
         timeTv.text = "~" + estimateTimeText(spec.lengthMeters)
-        difficultyTv.text = "—/5"
+        difficultyTv.text = "${difficultyForDistance(spec.lengthMeters)}/5"
 
         fetchJob?.cancel()
         fetchJob = viewLifecycleOwner.lifecycleScope.launch {
@@ -108,25 +103,6 @@ class NavigatorFragment : Fragment(R.layout.fragment_navigator) {
         routePolyline = null
         super.onDestroyView()
     }
-
-    // ---------- ORS fetch from spec ----------
-//    private suspend fun fetchRouteForSpec(spec: RouteSpec): List<LatLngDto> = withContext(Dispatchers.IO) {
-//        val body = OrsDirectionsBody(
-//            coordinates = listOf(listOf(spec.start.lon, spec.start.lat)),
-//            options = OrsOptions(
-//                roundTrip = OrsRoundTrip(length = spec.lengthMeters, seed = spec.seed)
-//            )
-//        )
-//
-//        val resp = ors.routeGeoJson(getString(R.string.ors_api_key), spec.profile, body)
-//        var coords = resp.features.firstOrNull()?.geometry?.coordinates.orEmpty()
-//        var geo = coords.map { ll -> GeoPoint(ll[1], ll[0]) }
-//
-//        if (spec.dir == "COUNTERCLOCKWISE") geo = geo.asReversed()
-//
-//        val simplified = withContext(Dispatchers.Default) { simplifyForMap(geo) }
-//        return@withContext simplified.map { LatLngDto(it.latitude, it.longitude) }
-//    }
 
     private suspend fun fetchRouteForSpec(spec: RouteSpec): List<LatLngDto> = withContext(Dispatchers.IO) {
         val body = OrsDirectionsBody(
@@ -176,6 +152,18 @@ class NavigatorFragment : Fragment(R.layout.fragment_navigator) {
         val h = floor(hours).toInt()
         val m = ((hours - h) * 60).roundToInt()
         return if (h > 0) "${h} h ${m} min" else "$m min"
+    }
+
+    private fun difficultyForDistance(meters: Int): Int {
+        val km = meters / 1000.0
+        return when {
+            km <= 0      -> 1
+            km < 10      -> 1
+            km < 30      -> 2
+            km < 60      -> 3
+            km < 100     -> 4
+            else         -> 5
+        }
     }
 
     private fun simplifyForMap(points: List<GeoPoint>, toleranceMeters: Double = 10.0, maxPoints: Int = 400): List<GeoPoint> {

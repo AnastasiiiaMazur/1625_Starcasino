@@ -30,7 +30,6 @@ import com.stcs.oon.fragments.helpers.*
 import com.stcs.oon.fragments.helpers.LocationKit
 import com.stcs.oon.fragments.helpers.LocationPermissionRequester
 import kotlinx.coroutines.*
-import com.stcs.oon.db.RouteSessionViewModel
 import com.stcs.oon.db.RouteSpec
 import com.stcs.oon.fragments.extra.RouteCache
 import kotlin.math.cos
@@ -80,12 +79,9 @@ class NewRouteFragment : Fragment(R.layout.fragment_new_route) {
     private var routeJob: Job? = null
     private var randomSeed = 1
 
-    private val routeSession: RouteSessionViewModel by activityViewModels()
-
     companion object {
         private const val ARG_ROUTE_SPEC = "arg_route_spec"
     }
-
 
     private var previewPoints: List<GeoPoint> = emptyList()
     private var lastProfile: String = "cycling-regular"
@@ -119,28 +115,6 @@ class NewRouteFragment : Fragment(R.layout.fragment_new_route) {
         setupUiGroups()
         setupKmSeekbar()
 
-//        startRouteBtn.setOnClickListener {
-//            val center = startCenter ?: return@setOnClickListener
-//            val profile = when (selectedType) {
-//                RouteType.SCENIC -> "cycling-regular"
-//                RouteType.FLAT -> "cycling-road"
-//                RouteType.TWISTY -> "cycling-mountain"
-//            }
-//            val seed = if (selectedDir == Direction.RANDOM) randomSeed else 1
-//            val spec = RouteSpec(
-//                start = LatLngDto(center.latitude, center.longitude),
-//                lengthMeters = distanceKm * 1000,
-//                profile = profile,
-//                seed = seed,
-//                dir = selectedDir.name
-//            )
-//            if (previewPoints.isNotEmpty()) {
-//                RouteCache.put(spec, previewPoints.map { LatLngDto(it.latitude, it.longitude) })
-//            }
-//            routeSession.spec = spec
-//            findNavController().navigate(R.id.navigatorFragment)
-//        }
-
         startRouteBtn.setOnClickListener {
             Log.d("NAV", "Start tapped")
             val center = startCenter ?: return@setOnClickListener
@@ -160,7 +134,6 @@ class NewRouteFragment : Fragment(R.layout.fragment_new_route) {
                 dir = selectedDir.name
             )
 
-            // Cancel any ongoing routing work and map following before navigating
             routeJob?.cancel()
             myLocationOverlay?.disableFollowLocation()
 
