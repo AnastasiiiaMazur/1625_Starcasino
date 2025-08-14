@@ -64,4 +64,5 @@ dependencies {
 
     // JSON (since we serialize the polyline)
     implementation("com.google.code.gson:gson:2.11.0")
+    implementation("androidx.datastore:datastore-preferences:1.1.7")
 }

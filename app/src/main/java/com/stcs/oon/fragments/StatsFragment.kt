@@ -5,7 +5,9 @@ import android.view.View
 import android.widget.TextView
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import com.github.mikephil.charting.charts.BarChart
 import com.github.mikephil.charting.components.AxisBase
 import com.github.mikephil.charting.components.XAxis
@@ -23,18 +25,19 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import com.github.mikephil.charting.formatter.ValueFormatter
+import com.stcs.oon.fragments.helpers.UnitSystem
+import com.stcs.oon.fragments.helpers.UserPrefs
 import kotlin.math.floor
 import kotlin.math.roundToInt
 
+
 class StatsFragment : Fragment(R.layout.fragment_stats) {
 
-    // Filters
     private lateinit var dayView: TextView
     private lateinit var weekView: TextView
     private lateinit var monthView: TextView
     private lateinit var allView: TextView
 
-    // KPIs
     private lateinit var totalDistance: TextView
     private lateinit var totalTime: TextView
     private lateinit var averageSpeed: TextView
@@ -42,12 +45,13 @@ class StatsFragment : Fragment(R.layout.fragment_stats) {
     private lateinit var longestRide: TextView
     private lateinit var totalRides: TextView
 
-    // Charts
     private lateinit var distChart: BarChart
     private lateinit var timeChart: BarChart
 
     private enum class Range { DAY, WEEK, MONTH, ALL }
-    private var currentRange = Range.DAY
+    private var currentRange = Range.ALL
+
+    private var unit: UnitSystem = UnitSystem.METRIC
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
@@ -68,8 +72,17 @@ class StatsFragment : Fragment(R.layout.fragment_stats) {
         timeChart = view.findViewById(R.id.idBarChart2)
 
         setupFilterButtons()
-        setupChart(distChart, yLabel = "km")
-        setupChart(timeChart, yLabel = "min")
+        setupChart(distChart)
+        setupChart(timeChart)
+
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                UserPrefs.unitFlow(requireContext()).collect { newUnit ->
+                    unit = newUnit
+                    setRange(currentRange)
+                }
+            }
+        }
 
         setRange(Range.ALL)
     }
@@ -172,14 +185,15 @@ class StatsFragment : Fragment(R.layout.fragment_stats) {
             val xLabels     = ArrayList<String>(bucketList.size)
 
             bucketList.forEachIndexed { idx, b ->
-                distEntries += BarEntry(idx.toFloat(), (b.distMeters / 1000f))
+                distEntries += BarEntry(idx.toFloat(), metersToUnit(b.distMeters).toFloat())
                 timeEntries += BarEntry(idx.toFloat(), (b.durSeconds / 60f))
                 xLabels     += labelFmt.format(Date(b.dayStart))
             }
 
-            val totalKm = sumDist / 1000.0
-            val totalHours = sumDur / 3600.0
-            val avgSpeedKmH = if (sumDur > 0) totalKm / totalHours else 0.0
+            val totalDistUnit = metersToUnit(sumDist)
+            val totalHours    = sumDur / 3600.0
+            val avgSpeedKmh   = if (sumDur > 0) (sumDist / 1000.0) / totalHours else 0.0
+            val avgSpeedUnit  = if (unit == UnitSystem.IMPERIAL) avgSpeedKmh * KM_TO_MI else avgSpeedKmh
 
             val ranked = weekdayCounts
                 .mapIndexed { i, c -> i to c }
@@ -190,21 +204,22 @@ class StatsFragment : Fragment(R.layout.fragment_stats) {
                 .ifEmpty { "—" }
 
             withContext(Dispatchers.Main) {
-                totalDistance.text = "Total Distance: ${formatKm(totalKm)} km"
+                totalDistance.text = "Total Distance: ${format1(totalDistUnit)} ${distanceUnit()}"
                 totalTime.text     = "Total Ride Time: ${formatHours(totalHours)}"
-                averageSpeed.text  = "Average Speed: ${formatKm(avgSpeedKmH)} km/h"
+                averageSpeed.text  = "Average Speed: ${format1(avgSpeedUnit)} ${speedUnit()}"
                 mostActiveDays.text= "Most Active Days: $ranked"
                 totalRides.text    = "Total Rides: ${rides.size} rides"
                 longestRide.text   =
                     longest?.let { r ->
                         val title = if (r.name.isNotBlank()) r.name else "Route ${r.id}"
-                        "Longest Ride: $title, ${formatKm(r.distanceMeters / 1000.0)} km"
+                        val len = metersToUnit(r.distanceMeters)
+                        "Longest Ride: $title, ${format1(len)} ${distanceUnit()}"
                     } ?: "Longest Ride: —"
 
                 setBarData(
                     chart = distChart,
                     entries = distEntries,
-                    label = "Distance (km)",
+                    label = "Distance (${distanceUnit()})",
                     xLabels = xLabels
                 )
                 setBarData(
@@ -219,7 +234,7 @@ class StatsFragment : Fragment(R.layout.fragment_stats) {
 
     // ---------------- Charts ----------------
 
-    private fun setupChart(chart: BarChart, yLabel: String) {
+    private fun setupChart(chart: BarChart) {
         chart.description.isEnabled = false
         chart.axisRight.isEnabled = false
         chart.legend.isEnabled = false
@@ -272,31 +287,40 @@ class StatsFragment : Fragment(R.layout.fragment_stats) {
         }
 
         return when (range) {
-            Range.DAY -> {
-                val start = startOfDay(cal)
-                start to now
-            }
+            Range.DAY -> startOfDay(cal) to now
             Range.WEEK -> {
                 cal.firstDayOfWeek = Calendar.MONDAY
                 cal.set(Calendar.DAY_OF_WEEK, cal.firstDayOfWeek)
-                val start = startOfDay(cal)
-                start to now
+                startOfDay(cal) to now
             }
             Range.MONTH -> {
                 cal.set(Calendar.DAY_OF_MONTH, 1)
-                val start = startOfDay(cal)
-                start to now
+                startOfDay(cal) to now
             }
             Range.ALL -> null to null
         }
     }
 
-    // ---------------- Formatting ----------------
+    // ---------------- Unit helpers & formatting ----------------
 
-    private fun formatKm(v: Double) = String.format(Locale.US, "%.1f", v)
+    private fun metersToUnit(meters: Number): Double {
+        val m = meters.toDouble()
+        return if (unit == UnitSystem.IMPERIAL) m / 1609.344 else m / 1000.0
+    }
+
+    private fun distanceUnit(): String = if (unit == UnitSystem.IMPERIAL) "mi" else "km"
+    private fun speedUnit(): String = if (unit == UnitSystem.IMPERIAL) "mph" else "km/h"
+
+    private fun format1(v: Double) = String.format(Locale.US, "%.1f", v)
+
     private fun formatHours(h: Double): String {
         val whole = floor(h).toInt()
         val mins = ((h - whole) * 60.0).roundToInt()
         return if (whole > 0) "${whole} h ${mins} min" else "$mins min"
     }
+
+    companion object {
+        private const val KM_TO_MI = 0.621371
+    }
 }
+

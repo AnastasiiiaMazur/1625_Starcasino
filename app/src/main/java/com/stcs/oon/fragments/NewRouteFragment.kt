@@ -279,7 +279,6 @@ class NewRouteFragment : Fragment(R.layout.fragment_new_route) {
         requestRoute()
     }
 
-
     private fun setupSingleSelect(items: List<LinearLayout>, defaultIndex: Int, onSelected: (selectedLayoutId: Int) -> Unit) {
         var selectedIndex = defaultIndex.coerceIn(0, items.lastIndex)
         items.forEachIndexed { i, row ->

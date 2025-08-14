@@ -42,7 +42,6 @@ class SavedRoutesFragment: Fragment(R.layout.fragment_saved_routes) {
         super.onViewCreated(view, savedInstanceState)
         ridesContainer = view.findViewById(R.id.ridesContainer)
 
-        // osmdroid base config once
         val base = requireContext().cacheDir.resolve("osmdroid")
         Configuration.getInstance().apply {
             userAgentValue = requireContext().packageName
@@ -152,7 +151,6 @@ class SavedRoutesFragment: Fragment(R.layout.fragment_saved_routes) {
         val sdf = java.text.SimpleDateFormat(pattern, java.util.Locale.getDefault())
         return sdf.format(java.util.Date(epochMillis))
     }
-
 
     private fun showConfirmDeleteDialog(
         onYes: () -> Unit,
