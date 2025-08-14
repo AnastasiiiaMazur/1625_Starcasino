@@ -75,11 +75,10 @@ class SavedRoutesFragment: Fragment(R.layout.fragment_saved_routes) {
             val delBtn = item.findViewById<TextView>(R.id.delete)
             val map = item.findViewById<MapView>(R.id.mapView)
 
-            // Map preview (small & light)
             map.setMultiTouchControls(false)
             map.setTileSource(TileSourceFactory.MAPNIK)
             val start = GeoPoint(ride.startLat, ride.startLon)
-            map.controller.setZoom(13.0)
+            map.controller.setZoom(15.0)
             map.controller.setCenter(start)
             Marker(map).apply {
                 position = start
@@ -91,12 +90,11 @@ class SavedRoutesFragment: Fragment(R.layout.fragment_saved_routes) {
 
             // Texts
             titleTv.text = if (ride.name.isNotBlank()) ride.name else "Route ${ride.id}"
-            dateTv.text = "—" // add createdAt in schema later if you want a real date
+            dateTv.text = "—"
             val km = ride.distanceMeters / 1000.0
             distTv.text = "${formatKm(km)} km, ${formatDuration(ride.durationSeconds)}"
             dateTv.text = formatRideDate(ride.createdAt, longMonth = true)
 
-            // VIEW -> Navigator with RouteSpec built from snapshot in DB
             viewBtn.setOnClickListener {
                 val args = Bundle().apply { putLong("arg_ride_id", ride.id) }
                 findNavController().navigate(R.id.savedRoutesDetailsFragment, args)

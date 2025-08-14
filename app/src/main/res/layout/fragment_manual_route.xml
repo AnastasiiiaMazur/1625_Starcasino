@@ -2,6 +2,7 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:orientation="vertical">
 
     <TextView
@@ -20,22 +21,25 @@
         android:layout_marginHorizontal="20dp"
         android:layout_marginTop="10dp">
 
-        <ImageView
-            android:id="@+id/map"
+        <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="200dp"
-            android:src="@drawable/map_placeholder"
-            android:scaleType="centerCrop"
-            android:background="@drawable/nav_button_back"
-            android:clipToOutline="true"/>
+            app:cardCornerRadius="15dp"
+            app:cardUseCompatPadding="true">
+
+            <org.osmdroid.views.MapView
+                android:id="@+id/map"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"/>
+        </com.google.android.material.card.MaterialCardView>
 
         <TextView
             android:id="@+id/removePoint"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="end|bottom"
-            android:layout_marginEnd="5dp"
-            android:layout_marginBottom="5dp"
+            android:layout_marginEnd="15dp"
+            android:layout_marginBottom="15dp"
             android:background="@drawable/basic_button_small_corners"
             android:paddingVertical="2dp"
             android:paddingHorizontal="20dp"
