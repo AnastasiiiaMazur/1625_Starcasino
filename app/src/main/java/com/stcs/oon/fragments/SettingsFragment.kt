@@ -13,7 +13,7 @@ import com.stcs.oon.R
 
 class SettingsFragment: Fragment(R.layout.fragment_settings) {
 
-    private val url = "https://www.google.com/"
+    private val url = "https://stcsoon.com/policy"
     private lateinit var miButton: TextView
     private lateinit var kmButton: TextView
     private lateinit var deleteButton: TextView

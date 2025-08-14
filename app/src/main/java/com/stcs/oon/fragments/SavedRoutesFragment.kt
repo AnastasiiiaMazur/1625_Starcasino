@@ -183,34 +183,73 @@ class SavedRoutesFragment: Fragment(R.layout.fragment_saved_routes) {
 
     }
 
-    private fun insertDummyRide() {
+
+    private fun insertSampleRides(count: Int = 10) {
+        val cities = listOf(
+            51.5074 to -0.1278,   // London
+            53.4808 to -2.2426,   // Manchester
+            55.9533 to -3.1883,   // Edinburgh
+            48.8566 to  2.3522,   // Paris
+            52.5200 to 13.4050    // Berlin
+        )
+        val profiles = listOf("cycling-regular", "cycling-road", "cycling-mountain")
+        val dirs = listOf("CLOCKWISE", "COUNTERCLOCKWISE")
+
         viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
             val dao = AppDatabase.getInstance(requireContext()).rideDao()
+            val now = System.currentTimeMillis()
+            val dayMs = 24L * 60 * 60 * 1000
 
-            val dummy = RideEntity(
-                name = "",
-                startLat = 51.5074,
-                startLon = -0.1278,
-                specLengthMeters = 5_000,
-                specProfile = "cycling-mountain",
-                specSeed = 1,
-                specDir = "CLOCKWISE",
-                polylineJson = null,
-                distanceMeters = 5_000,
-                durationSeconds = 1_800,
-                avgSpeedKmh = null,
-                difficulty = 2,
-                description = "Testing how it works",
-                rating = null,
-                createdAt = System.currentTimeMillis()
-            )
+            repeat(count) {
+                val (lat, lon) = cities.random()
+                val lenMeters = listOf(5_000, 12_000, 25_000, 40_000, 65_000).random()
+                val profile = profiles.random()
+                val dir = dirs.random()
+                val seed = (1..100_000).random()
 
-            val id = dao.insert(dummy)
-            dao.updateName(id, "Route $id")
+                // Random date within last 30 days
+                val createdAt = now - (0..30).random() * dayMs
+
+                val km = lenMeters / 1000.0
+                val durationSeconds = ((km / 15.0) * 3600.0).toLong().coerceAtLeast(300L)
+
+                val ride = RideEntity(
+                    id = 0,
+                    name = "", // will rename after insert
+                    startLat = lat,
+                    startLon = lon,
+                    specLengthMeters = lenMeters,
+                    specProfile = profile,
+                    specSeed = seed,
+                    specDir = dir,
+                    polylineJson = null,
+                    distanceMeters = lenMeters,
+                    durationSeconds = durationSeconds,
+                    avgSpeedKmh = null,
+                    difficulty = difficultyForDistance(lenMeters),
+                    description = null,
+                    rating = null,
+                    createdAt = createdAt
+                )
+
+                val id = dao.insert(ride)
+                dao.updateName(id, "Route $id")
+            }
 
             withContext(Dispatchers.Main) {
-                Toast.makeText(requireContext(), "Inserted Route $id", Toast.LENGTH_SHORT).show()
+                Toast.makeText(requireContext(), "Inserted $count dummy rides", Toast.LENGTH_SHORT).show()
             }
+        }
+    }
+
+    private fun difficultyForDistance(meters: Int): Int {
+        val km = meters / 1000.0
+        return when {
+            km < 10   -> 1
+            km < 30   -> 2
+            km < 60   -> 3
+            km < 100  -> 4
+            else      -> 5
         }
     }
 }

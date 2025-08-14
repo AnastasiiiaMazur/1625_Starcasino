@@ -39,4 +39,10 @@ interface RideDao {
         im2: String?,
         im3: String?
     )
+
+    @Query("SELECT * FROM rides ORDER BY createdAt ASC")
+    suspend fun getAllasc(): List<RideEntity>
+
+    @Query("SELECT * FROM rides WHERE createdAt BETWEEN :start AND :end ORDER BY createdAt ASC")
+    suspend fun getBetween(start: Long, end: Long): List<RideEntity>
 }
