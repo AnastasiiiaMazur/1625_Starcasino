@@ -293,7 +293,6 @@ class NavigatorFragment : Fragment(R.layout.fragment_navigator) {
         val diff = difficultyForDistance(distanceMeters)
 
         if (rideIdArg != null) {
-            // UPDATE existing (manual route path)
             viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
                 val dao = AppDatabase.getInstance(requireContext()).rideDao()
                 dao.updateTrackingStats(

@@ -16,6 +16,8 @@ import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import com.stcs.oon.R
 import com.stcs.oon.db.AppDatabase
+import com.stcs.oon.fragments.helpers.UnitSystem
+import com.stcs.oon.fragments.helpers.UserPrefs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -57,14 +59,38 @@ class SettingsFragment: Fragment(R.layout.fragment_settings) {
             )
         }
 
+        lifecycleScope.launchWhenStarted {
+            UserPrefs.unitFlow(requireContext()).collect { unit ->
+                // Visually highlight the selected one
+                val selectedBg = R.drawable.basic_button
+                val normalBg   = R.drawable.button_outline_black
+                val selectedTxt = requireContext().getColor(R.color.white)
+                val normalTxt   = requireContext().getColor(R.color.black)
+
+                if (unit == UnitSystem.METRIC) {
+                    kmButton.setBackgroundResource(selectedBg); kmButton.setTextColor(selectedTxt)
+                    miButton.setBackgroundResource(normalBg);  miButton.setTextColor(normalTxt)
+                } else {
+                    miButton.setBackgroundResource(selectedBg); miButton.setTextColor(selectedTxt)
+                    kmButton.setBackgroundResource(normalBg);  kmButton.setTextColor(normalTxt)
+                }
+            }
+        }
+
         miButton.setOnClickListener {
+            lifecycleScope.launch { UserPrefs.setUnit(requireContext(), UnitSystem.IMPERIAL) }
+
             kmButton.setTextColor(resources.getColor(R.color.text_red))
             kmButton.setBackgroundResource(R.drawable.button_outline_black)
 
             miButton.setTextColor(resources.getColor(R.color.white))
             miButton.setBackgroundResource(R.drawable.basic_button_small_corners)
         }
+
+
         kmButton.setOnClickListener {
+            lifecycleScope.launch { UserPrefs.setUnit(requireContext(), UnitSystem.METRIC) }
+
             miButton.setTextColor(resources.getColor(R.color.text_red))
             miButton.setBackgroundResource(R.drawable.button_outline_black)
 
