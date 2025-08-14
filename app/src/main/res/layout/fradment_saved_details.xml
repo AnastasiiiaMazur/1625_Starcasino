@@ -6,6 +6,7 @@
     android:orientation="vertical">
 
     <TextView
+        android:id="@+id/rideTitle"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="110dp"
@@ -14,6 +15,19 @@
         android:text="Ride Title"
         android:fontFamily="@font/montserrat_regular"
         android:layout_gravity="center"/>
+
+    <EditText
+        android:id="@+id/rideTitleEdit"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="20dp"
+        android:inputType="text"
+        android:maxLength="20"
+        android:textSize="24sp"
+        android:textColor="@color/text_red"
+        android:text="Ride Title"
+        android:visibility="gone"
+        android:fontFamily="@font/montserrat_regular"/>
 
     <com.google.android.material.card.MaterialCardView
         android:layout_width="match_parent"
@@ -44,6 +58,7 @@
             android:layout_marginEnd="10dp">
 
             <TextView
+                android:id="@+id/date"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:textSize="16sp"
@@ -52,6 +67,7 @@
                 android:fontFamily="@font/montserrat_regular"/>
 
             <TextView
+                android:id="@+id/distanceDuration"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:textSize="16sp"
@@ -70,14 +86,15 @@
             android:orientation="horizontal"/>
     </LinearLayout>
 
-    <TextView
+    <EditText
         android:id="@+id/description"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:background="@drawable/basic_button"
         android:layout_marginHorizontal="20dp"
         android:layout_marginTop="10dp"
-        android:text="Test text"
+        android:inputType="text|textCapSentences|textMultiLine"
+        android:maxLength="50"
         android:paddingHorizontal="10dp"
         android:paddingVertical="7dp"
         android:textColor="@color/white"
@@ -91,39 +108,100 @@
         android:layout_marginHorizontal="20dp"
         android:layout_marginTop="10dp">
 
-        <ImageView
-            android:id="@+id/im1"
+        <FrameLayout
             android:layout_width="0dp"
             android:layout_weight="1"
-            android:layout_height="match_parent"
-            android:src="@drawable/ic_camera"
-            android:scaleType="centerCrop"
-            android:background="@drawable/nav_button_back"
-            android:clipToOutline="true"/>
+            android:layout_height="match_parent">
 
-        <ImageView
-            android:id="@+id/im2"
-            android:layout_width="0dp"
-            android:layout_weight="1"
-            android:layout_height="match_parent"
-            android:src="@drawable/ic_camera"
-            android:scaleType="centerCrop"
-            android:layout_marginHorizontal="10dp"
-            android:background="@drawable/nav_button_back"
-            android:clipToOutline="true"/>
+            <ImageView
+                android:id="@+id/im1"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:src="@drawable/ic_camera"
+                android:scaleType="centerCrop"
+                android:background="@drawable/nav_button_back"
+                android:clipToOutline="true"/>
 
-        <ImageView
-            android:id="@+id/im3"
+            <ImageView
+                android:id="@+id/im1Delete"
+                android:layout_width="30dp"
+                android:layout_height="30dp"
+                android:padding="6dp"
+                android:src="@drawable/ic_delete"
+                android:scaleType="centerCrop"
+                android:background="@drawable/basic_button_small_corners"
+                android:layout_gravity="end"
+                android:visibility="gone"
+                android:layout_marginTop="4dp"
+                android:layout_marginEnd="4dp"
+                android:clipToOutline="true"/>
+
+        </FrameLayout>
+
+        <FrameLayout
             android:layout_width="0dp"
             android:layout_weight="1"
             android:layout_height="match_parent"
-            android:src="@drawable/ic_camera"
-            android:scaleType="centerCrop"
-            android:background="@drawable/nav_button_back"
-            android:clipToOutline="true"/>
+            android:layout_marginHorizontal="7dp">
+
+            <ImageView
+                android:id="@+id/im2"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:src="@drawable/ic_camera"
+                android:scaleType="centerCrop"
+                android:background="@drawable/nav_button_back"
+                android:clipToOutline="true"/>
+
+            <ImageView
+                android:id="@+id/im2Delete"
+                android:layout_width="30dp"
+                android:layout_height="30dp"
+                android:padding="6dp"
+                android:src="@drawable/ic_delete"
+                android:scaleType="centerCrop"
+                android:background="@drawable/basic_button_small_corners"
+                android:layout_gravity="end"
+                android:visibility="gone"
+                android:layout_marginTop="4dp"
+                android:layout_marginEnd="4dp"
+                android:clipToOutline="true"/>
+
+        </FrameLayout>
+
+        <FrameLayout
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="match_parent">
+
+            <ImageView
+                android:id="@+id/im3"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:src="@drawable/ic_camera"
+                android:scaleType="centerCrop"
+                android:background="@drawable/nav_button_back"
+                android:clipToOutline="true"/>
+
+            <ImageView
+                android:id="@+id/im3Delete"
+                android:layout_width="30dp"
+                android:layout_height="30dp"
+                android:padding="6dp"
+                android:src="@drawable/ic_delete"
+                android:scaleType="centerCrop"
+                android:background="@drawable/basic_button_small_corners"
+                android:layout_gravity="end"
+                android:visibility="gone"
+                android:layout_marginTop="4dp"
+                android:layout_marginEnd="4dp"
+                android:clipToOutline="true"/>
+
+        </FrameLayout>
     </LinearLayout>
 
     <TextView
+        android:id="@+id/saveBtn"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="30dp"
@@ -131,7 +209,8 @@
         android:textSize="16sp"
         android:textColor="@color/white"
         android:fontFamily="@font/montserrat_semibold"
-        android:text="View On Map"
+        android:text="@string/save"
+        android:visibility="gone"
         android:paddingVertical="8dp"
         android:paddingHorizontal="25dp"
         android:layout_gravity="center"/>
@@ -144,7 +223,7 @@
         android:layout_marginTop="15dp">
 
         <TextView
-            android:id="@+id/yes"
+            android:id="@+id/edit"
             android:layout_width="0dp"
             android:layout_weight="1"
             android:layout_height="wrap_content"
@@ -158,7 +237,7 @@
             android:gravity="center"/>
 
         <TextView
-            android:id="@+id/no"
+            android:id="@+id/delete"
             android:layout_width="0dp"
             android:layout_weight="1"
             android:layout_height="wrap_content"

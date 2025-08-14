@@ -19,6 +19,7 @@ import com.stcs.oon.db.AppDatabase
 import com.stcs.oon.db.RideEntity
 import com.stcs.oon.db.LatLngDto
 import com.stcs.oon.db.RouteSpec
+import com.stcs.oon.fragments.extra.SavedDetailsFragment
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -97,14 +98,7 @@ class SavedRoutesFragment: Fragment(R.layout.fragment_saved_routes) {
 
             // VIEW -> Navigator with RouteSpec built from snapshot in DB
             viewBtn.setOnClickListener {
-                val spec = RouteSpec(
-                    start = LatLngDto(ride.startLat, ride.startLon),
-                    lengthMeters = ride.specLengthMeters,
-                    profile = ride.specProfile,
-                    seed = ride.specSeed,
-                    dir = ride.specDir
-                )
-                val args = bundleOf(ARG_ROUTE_SPEC to spec)
+                val args = Bundle().apply { putLong("arg_ride_id", ride.id) }
                 findNavController().navigate(R.id.savedRoutesDetailsFragment, args)
             }
 

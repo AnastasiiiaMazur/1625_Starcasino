@@ -33,6 +33,9 @@ data class RideEntity(
     val description: String? = null,
     val rating: Int? = null,
     val createdAt: Long,
+    val im1Uri: String? = null,
+    val im2Uri: String? = null,
+    val im3Uri: String? = null,
 
     // Optional stored geometry (keep null if you don't want to persist polyline)
     val polylineJson: String? = null

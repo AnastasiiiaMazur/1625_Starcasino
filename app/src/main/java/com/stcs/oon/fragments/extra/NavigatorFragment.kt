@@ -30,6 +30,7 @@ import com.stcs.oon.fragments.helpers.OrsDirectionsBody
 import com.stcs.oon.fragments.helpers.OrsOptions
 import com.stcs.oon.fragments.helpers.OrsRoundTrip
 import org.osmdroid.views.overlay.mylocation.MyLocationNewOverlay
+import kotlin.String
 
 
 class NavigatorFragment : Fragment(R.layout.fragment_navigator) {
@@ -198,6 +199,9 @@ class NavigatorFragment : Fragment(R.layout.fragment_navigator) {
             difficulty = difficulty,
             description = null,
             rating = null,
+            im1Uri = null,
+            im2Uri = null,
+            im3Uri = null,
             createdAt = System.currentTimeMillis()
         )
 

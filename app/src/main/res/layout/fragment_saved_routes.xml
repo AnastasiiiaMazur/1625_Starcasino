@@ -14,13 +14,19 @@
         android:fontFamily="@font/montserrat_regular"
         android:layout_gravity="center"/>
 
-    <LinearLayout
-        android:id="@+id/ridesContainer"
+    <ScrollView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="vertical"
         android:layout_marginTop="10dp"
         android:paddingHorizontal="20dp"
         android:layout_marginBottom="75dp"
-        android:paddingBottom="15dp"/>
+        android:paddingBottom="15dp">
+
+        <LinearLayout
+            android:id="@+id/ridesContainer"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"/>
+    </ScrollView>
+
 </LinearLayout>

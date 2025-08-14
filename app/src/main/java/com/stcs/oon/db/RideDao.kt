@@ -15,4 +15,28 @@ interface RideDao {
 
     @Query("DELETE FROM rides WHERE id = :id")
     suspend fun delete(id: Long)
+
+
+    @Query("SELECT * FROM rides WHERE id = :id")
+    suspend fun getById(id: Long): RideEntity?
+
+    @Query("""
+        UPDATE rides
+        SET name = :name,
+            description = :description,
+            rating = :rating,
+            im1Uri = :im1,
+            im2Uri = :im2,
+            im3Uri = :im3
+        WHERE id = :id
+    """)
+    suspend fun updateEditableFields(
+        id: Long,
+        name: String,
+        description: String?,
+        rating: Int?,
+        im1: String?,
+        im2: String?,
+        im3: String?
+    )
 }
