@@ -32,6 +32,7 @@ import com.stcs.oon.fragments.helpers.OrsClient
 import com.stcs.oon.fragments.helpers.OrsDirectionsBody
 import com.stcs.oon.fragments.helpers.OrsOptions
 import com.stcs.oon.fragments.helpers.OrsRoundTrip
+import com.stcs.oon.fragments.helpers.installHideKeyboardOnTouchOutside
 import org.osmdroid.util.BoundingBox
 
 
@@ -41,7 +42,6 @@ class SavedDetailsFragment : Fragment(R.layout.fradment_saved_details) {
         private const val ARG_RIDE_ID = "arg_ride_id"
     }
 
-    // Views
     private lateinit var rideTitle: TextView
     private lateinit var rideTitleEdit: EditText
     private lateinit var dateTv: TextView
@@ -59,7 +59,6 @@ class SavedDetailsFragment : Fragment(R.layout.fradment_saved_details) {
     private lateinit var im2Delete: ImageView
     private lateinit var im3Delete: ImageView
 
-    // State
     private var isEditing = false
     private var currentRating = 0
     private var image1Uri: String? = null
@@ -68,7 +67,6 @@ class SavedDetailsFragment : Fragment(R.layout.fradment_saved_details) {
     private var selectedImageSlot = 0
     private lateinit var ride: RideEntity
 
-    // Routing + map
     private val ors by lazy { OrsClient.create(logging = false) }
     private var routeJob: Job? = null
     private var routePolyline: Polyline? = null
@@ -98,7 +96,6 @@ class SavedDetailsFragment : Fragment(R.layout.fradment_saved_details) {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        // bind
         rideTitle = view.findViewById(R.id.rideTitle)
         rideTitleEdit = view.findViewById(R.id.rideTitleEdit)
         dateTv = view.findViewById(R.id.date)
@@ -115,6 +112,11 @@ class SavedDetailsFragment : Fragment(R.layout.fradment_saved_details) {
         im1Delete = view.findViewById(R.id.im1Delete)
         im2Delete = view.findViewById(R.id.im2Delete)
         im3Delete = view.findViewById(R.id.im3Delete)
+
+
+        view.isClickable = true
+        view.isFocusableInTouchMode = true
+        view.installHideKeyboardOnTouchOutside()
 
         // osmdroid init
         val base = requireContext().cacheDir.resolve("osmdroid")

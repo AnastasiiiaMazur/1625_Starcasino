@@ -76,6 +76,10 @@ class ManualRouteFragment : Fragment(R.layout.fragment_manual_route) {
         difficultyTv = view.findViewById(R.id.difficulty)
         generateBtn  = view.findViewById(R.id.generateRouteBtn)
 
+        view.isClickable = true
+        view.isFocusableInTouchMode = true
+        view.installHideKeyboardOnTouchOutside()
+
         // osmdroid
         val base = requireContext().cacheDir.resolve("osmdroid")
         Configuration.getInstance().apply {
