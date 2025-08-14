@@ -1,5 +1,6 @@
 package com.stcs.oon.fragments
 
+import android.util.Log
 import android.os.Bundle
 import android.view.View
 import androidx.fragment.app.Fragment
@@ -25,10 +26,13 @@ import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.Polyline
 import kotlin.math.*
 import com.stcs.oon.fragments.helpers.*
+import com.stcs.oon.fragments.extra.NavigatorFragment
+import org.osmdroid.views.overlay.mylocation.MyLocationNewOverlay
+import java.util.Locale
 
 class ManualRouteFragment : Fragment(R.layout.fragment_manual_route) {
 
-    // Views
+    // --- Views ---
     private lateinit var mapView: MapView
     private lateinit var addBtn: TextView
     private lateinit var clearBtn: TextView
@@ -53,8 +57,7 @@ class ManualRouteFragment : Fragment(R.layout.fragment_manual_route) {
 
     // Location
     private lateinit var locationRequester: LocationPermissionRequester
-    private var myLocationOverlay: org.osmdroid.views.overlay.mylocation.MyLocationNewOverlay? = null
-
+    private var myLocationOverlay: MyLocationNewOverlay? = null
 
     companion object {
         const val ARG_RIDE_ID = "arg_ride_id"
@@ -73,6 +76,7 @@ class ManualRouteFragment : Fragment(R.layout.fragment_manual_route) {
         difficultyTv = view.findViewById(R.id.difficulty)
         generateBtn  = view.findViewById(R.id.generateRouteBtn)
 
+        // osmdroid
         val base = requireContext().cacheDir.resolve("osmdroid")
         Configuration.getInstance().apply {
             userAgentValue = requireContext().packageName
@@ -83,7 +87,8 @@ class ManualRouteFragment : Fragment(R.layout.fragment_manual_route) {
         mapView.setTileSource(TileSourceFactory.MAPNIK)
         mapView.controller.setZoom(13.0)
 
-        val tapOverlay = MapEventsOverlay(object : MapEventsReceiver {
+        // Tap to add waypoint when in add mode
+        mapView.overlays.add(MapEventsOverlay(object : MapEventsReceiver {
             override fun singleTapConfirmedHelper(p: GeoPoint?): Boolean {
                 if (!isAddMode || p == null) return false
                 addWaypoint(p)
@@ -91,45 +96,42 @@ class ManualRouteFragment : Fragment(R.layout.fragment_manual_route) {
                 return true
             }
             override fun longPressHelper(p: GeoPoint?) = false
-        })
-        mapView.overlays.add(tapOverlay)
+        }))
 
+        // Buttons
         addBtn.setOnClickListener { toggleAddMode(!isAddMode) }
         clearBtn.setOnClickListener { clearAll() }
         removeBtn.setOnClickListener { removeSelected() }
         removeBtn.isEnabled = false
 
-        generateBtn.setOnClickListener { generateAndSave() }
+        generateBtn.setOnClickListener {
+            generateBtn.isEnabled = false
+            generateAndNavigate()
+        }
 
+        // Center on user
         locationRequester = LocationPermissionRequester(
             fragment = this,
             onGranted = {
-                LocationKit.toGeoPoint(LocationKit.getBestLastKnownLocation(requireContext()))?.let { p ->
+                LocationKit.toGeoPoint(
+                    LocationKit.getBestLastKnownLocation(requireContext())
+                )?.let { p ->
                     mapView.controller.setZoom(15.0)
                     mapView.controller.setCenter(p)
                 }
-
                 myLocationOverlay = LocationKit.attachMyLocationOverlay(
-                    mapView = mapView,
-                    context = requireContext(),
-                    follow = false
+                    mapView = mapView, context = requireContext(), follow = false
                 ) { firstFix ->
-                    requireActivity().runOnUiThread {
-                        mapView.controller.animateTo(firstFix)
-                    }
+                    requireActivity().runOnUiThread { mapView.controller.animateTo(firstFix) }
                 }
                 mapView.overlays.add(myLocationOverlay)
             },
-            onDenied = { permanentlyDenied ->
-                if (permanentlyDenied) {
-                    LocationKit.openAppSettings(this)
-                } else {
-                    Toast.makeText(requireContext(), "Location permission is needed to center the map.", Toast.LENGTH_LONG).show()
-                }
+            onDenied = { permanently ->
+                if (permanently) LocationKit.openAppSettings(this)
+                else Toast.makeText(requireContext(), "Location permission is needed to center the map.", Toast.LENGTH_LONG).show()
             }
         )
         locationRequester.request()
-
 
         updateStats(emptyList())
     }
@@ -137,12 +139,14 @@ class ManualRouteFragment : Fragment(R.layout.fragment_manual_route) {
     override fun onResume() { super.onResume(); mapView.onResume() }
     override fun onPause()  { mapView.onPause(); super.onPause() }
     override fun onDestroyView() {
+        myLocationOverlay?.disableMyLocation()
+        myLocationOverlay = null
         routeJob?.cancel()
         super.onDestroyView()
     }
 
-    // ---------------- Waypoints & Markers ----------------
 
+    // ---------- Waypoints ----------
     private fun toggleAddMode(enabled: Boolean) {
         isAddMode = enabled
         val bg = if (enabled) R.drawable.basic_button else R.drawable.button_outline_black
@@ -164,8 +168,7 @@ class ManualRouteFragment : Fragment(R.layout.fragment_manual_route) {
             setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
             title = "Point $number"
             setOnMarkerClickListener { marker, _ ->
-                selectMarker(marker)
-                true
+                selectMarker(marker); true
             }
         }
         markers.add(m)
@@ -174,7 +177,7 @@ class ManualRouteFragment : Fragment(R.layout.fragment_manual_route) {
     }
 
     private fun selectMarker(m: Marker) {
-        selectedMarker?.icon = null
+        selectedMarker?.icon = null // restore default
         selectedMarker = m
         m.icon = ContextCompat.getDrawable(requireContext(), R.drawable.button_round)
         removeBtn.isEnabled = true
@@ -213,16 +216,13 @@ class ManualRouteFragment : Fragment(R.layout.fragment_manual_route) {
         updateStats(emptyList())
     }
 
-    // ---------------- Routing ----------------
-
+    // ---------- Routing ----------
     private fun reroute() {
         routeJob?.cancel()
-
         if (waypoints.size < 2) {
             routePolyline?.let { mapView.overlays.remove(it) }
             routePolyline = null
-            val p = waypoints.firstOrNull()
-            if (p != null) mapView.controller.setCenter(p)
+            waypoints.firstOrNull()?.let { mapView.controller.setCenter(it) }
             mapView.invalidate()
             updateStats(emptyList())
             return
@@ -231,7 +231,6 @@ class ManualRouteFragment : Fragment(R.layout.fragment_manual_route) {
         routeJob = viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val coords = waypoints.map { listOf(it.longitude, it.latitude) }
-
                 val body = OrsDirectionsBody(
                     coordinates = coords,
                     instructions = false,
@@ -242,16 +241,13 @@ class ManualRouteFragment : Fragment(R.layout.fragment_manual_route) {
                 val resp = withContext(Dispatchers.IO) {
                     ors.routeGeoJson(apiKey, "cycling-regular", body)
                 }
-
-                val points = resp.features.firstOrNull()
-                    ?.geometry?.coordinates.orEmpty()
+                val points = resp.features.firstOrNull()?.geometry?.coordinates.orEmpty()
                     .map { ll -> GeoPoint(ll[1], ll[0]) }
 
                 routedPoints = points
                 drawRoute(points)
                 updateStats(points)
-            } catch (e: CancellationException) {
-                // ignore
+            } catch (_: CancellationException) {
             } catch (e: Exception) {
                 Toast.makeText(requireContext(), "Route error: ${e.message}", Toast.LENGTH_SHORT).show()
             }
@@ -261,23 +257,20 @@ class ManualRouteFragment : Fragment(R.layout.fragment_manual_route) {
     private fun drawRoute(points: List<GeoPoint>) {
         routePolyline?.let { mapView.overlays.remove(it) }
         routePolyline = null
-
         if (points.isNotEmpty()) {
             routePolyline = Polyline().apply {
                 setPoints(points)
                 outlinePaint.strokeWidth = 6f
-                outlinePaint.color = 0xFFE53935.toInt() // red-ish
+                outlinePaint.color = 0xFFE53935.toInt()
             }
             mapView.overlays.add(routePolyline)
-
-            val bbox: BoundingBox = BoundingBox.fromGeoPointsSafe(points)
+            val bbox = BoundingBox.fromGeoPointsSafe(points)
             mapView.zoomToBoundingBox(bbox, true, 80)
         }
         mapView.invalidate()
     }
 
-    // ---------------- Stats (distance / time / difficulty) ----------------
-
+    // ---------- Stats ----------
     private fun updateStats(points: List<GeoPoint>) {
         val meters = polylineLength(points)
         val km = meters / 1000.0
@@ -293,9 +286,7 @@ class ManualRouteFragment : Fragment(R.layout.fragment_manual_route) {
     private fun polylineLength(points: List<GeoPoint>): Int {
         if (points.size < 2) return 0
         var sum = 0.0
-        for (i in 1 until points.size) {
-            sum += haversine(points[i - 1], points[i])
-        }
+        for (i in 1 until points.size) sum += haversine(points[i - 1], points[i])
         return sum.roundToInt()
     }
 
@@ -314,21 +305,22 @@ class ManualRouteFragment : Fragment(R.layout.fragment_manual_route) {
     private fun difficultyForDistance(meters: Int): Int {
         val km = meters / 1000.0
         return when {
-            km < 10   -> 1
-            km < 30   -> 2
-            km < 60   -> 3
-            km < 100  -> 4
-            else      -> 5
+            km <= 0      -> 1
+            km < 10      -> 1
+            km < 30      -> 2
+            km < 60      -> 3
+            km < 100     -> 4
+            else         -> 5
         }
     }
 
-    private fun formatKm(v: Double) = String.format(java.util.Locale.US, "%.1f", v)
+    private fun formatKm(v: Double) = String.format(Locale.US, "%.1f", v)
 
-    // ---------------- Save & Navigate ----------------
-
-    private fun generateAndSave() {
+    // ---------- Save & Navigate (single place to navigate) ----------
+    private fun generateAndNavigate() {
         if (waypoints.size < 2 || routedPoints.isEmpty()) {
             Toast.makeText(requireContext(), "Add at least two points", Toast.LENGTH_SHORT).show()
+            generateBtn.isEnabled = true
             return
         }
 
@@ -339,7 +331,6 @@ class ManualRouteFragment : Fragment(R.layout.fragment_manual_route) {
 
         val line = routedPoints.map { LatLngDto(it.latitude, it.longitude) }
         val polyJson = Gson().toJson(line)
-
         val start = waypoints.first()
 
         viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
@@ -348,11 +339,11 @@ class ManualRouteFragment : Fragment(R.layout.fragment_manual_route) {
                 name = name,
                 startLat = start.latitude,
                 startLon = start.longitude,
-                specLengthMeters = meters,         // store actual length we built
-                specProfile = "cycling-regular",   // manual: regular bike
-                specSeed = 0,                      // not applicable; keep 0
-                specDir = "CLOCKWISE",             // n/a for manual
-                polylineJson = polyJson,           // <— actual route geometry
+                specLengthMeters = meters,
+                specProfile = "cycling-regular",
+                specSeed = 0,
+                specDir = "CLOCKWISE",
+                polylineJson = polyJson,
                 distanceMeters = meters,
                 durationSeconds = durationSeconds,
                 avgSpeedKmh = null,
@@ -361,17 +352,18 @@ class ManualRouteFragment : Fragment(R.layout.fragment_manual_route) {
                 rating = null,
                 createdAt = System.currentTimeMillis()
             )
-
-            val id = dao.insert(ride)
-            if (name.isBlank()) dao.updateName(id, "Route $id")
+            val rideId = dao.insert(ride)
+            if (name.isBlank()) dao.updateName(rideId, "Route $rideId")
 
             withContext(Dispatchers.Main) {
-                Toast.makeText(requireContext(), "Route $id saved", Toast.LENGTH_SHORT).show()
+                generateBtn.isEnabled = true
+                Toast.makeText(requireContext(), "Route $rideId created", Toast.LENGTH_SHORT).show()
                 findNavController().navigate(
                     R.id.navigatorFragment,
-                    bundleOf(ARG_RIDE_ID to id)
+                    bundleOf(ARG_RIDE_ID to rideId)
                 )
             }
         }
     }
 }
+

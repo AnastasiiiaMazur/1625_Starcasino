@@ -71,7 +71,6 @@ class StatsFragment : Fragment(R.layout.fragment_stats) {
         setupChart(distChart, yLabel = "km")
         setupChart(timeChart, yLabel = "min")
 
-        // default selection: DAY (others remain default style)
         setRange(Range.ALL)
     }
 
@@ -86,7 +85,7 @@ class StatsFragment : Fragment(R.layout.fragment_stats) {
 
     private fun setRange(range: Range) {
         currentRange = range
-        val defaultBg = R.drawable.button_outline_black
+        val defaultBg = R.drawable.button_outline_red
         val selectedBg = R.drawable.basic_button_small_corners
         val red = requireContext().getColor(R.color.text_red)
         val white = requireContext().getColor(R.color.white)
