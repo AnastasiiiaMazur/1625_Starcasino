@@ -16,6 +16,8 @@ interface RideDao {
     @Query("DELETE FROM rides WHERE id = :id")
     suspend fun delete(id: Long)
 
+    @Query("DELETE FROM rides")
+    suspend fun deleteAll()
 
     @Query("SELECT * FROM rides WHERE id = :id")
     suspend fun getById(id: Long): RideEntity?
@@ -38,6 +40,22 @@ interface RideDao {
         im1: String?,
         im2: String?,
         im3: String?
+    )
+
+    @Query("""
+        UPDATE rides
+        SET distanceMeters = :distance,
+            durationSeconds = :duration,
+            avgSpeedKmh = :avgKmh,
+            difficulty = :difficulty
+        WHERE id = :id
+""")
+    suspend fun updateTrackingStats(
+        id: Long,
+        distance: Int,
+        duration: Long,
+        avgKmh: Double?,
+        difficulty: Int?
     )
 
     @Query("SELECT * FROM rides ORDER BY createdAt ASC")

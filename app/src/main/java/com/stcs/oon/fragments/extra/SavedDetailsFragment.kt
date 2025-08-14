@@ -286,6 +286,8 @@ class SavedDetailsFragment : Fragment(R.layout.fradment_saved_details) {
 
         rideTitleEdit.visibility = if (editing) View.VISIBLE else View.GONE
         saveBtn.visibility = if (editing) View.VISIBLE else View.GONE
+        editBtn.visibility = if (editing) View.GONE else View.VISIBLE
+        deleteBtn.visibility = if (editing) View.GONE else View.VISIBLE
 
         im1Delete.visibility = if (editing) View.VISIBLE else View.GONE
         im2Delete.visibility = if (editing) View.VISIBLE else View.GONE

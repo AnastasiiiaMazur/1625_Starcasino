@@ -149,11 +149,11 @@ class ManualRouteFragment : Fragment(R.layout.fragment_manual_route) {
     // ---------- Waypoints ----------
     private fun toggleAddMode(enabled: Boolean) {
         isAddMode = enabled
-        val bg = if (enabled) R.drawable.basic_button else R.drawable.button_outline_black
+        val bg = if (enabled) R.drawable.basic_button_small_corners else R.drawable.button_outline_black
         val col = if (enabled) R.color.white else R.color.black
         addBtn.setBackgroundResource(bg)
         addBtn.setTextColor(ContextCompat.getColor(requireContext(), col))
-        Toast.makeText(requireContext(), if (enabled) "Tap the map to add a point" else "Add off", Toast.LENGTH_SHORT).show()
+        Toast.makeText(requireContext(), "Tap the map to add a point", Toast.LENGTH_SHORT).show()
     }
 
     private fun addWaypoint(p: GeoPoint) {
