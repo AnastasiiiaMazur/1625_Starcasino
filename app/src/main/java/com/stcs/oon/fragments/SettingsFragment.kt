@@ -15,6 +15,7 @@ import android.widget.Toast
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import com.stcs.oon.R
+import com.stcs.oon.WebActivity
 import com.stcs.oon.db.AppDatabase
 import com.stcs.oon.fragments.helpers.UnitSystem
 import com.stcs.oon.fragments.helpers.UserPrefs
@@ -44,6 +45,12 @@ class SettingsFragment: Fragment(R.layout.fragment_settings) {
 
         rateButton.setOnClickListener { requireContext().openAppInPlayStore() }
         shareButton.setOnClickListener { requireContext().shareApp() }
+
+        privacyButton.setOnClickListener {
+            val intent = Intent(requireContext(), WebActivity::class.java)
+            intent.putExtra("url", url)
+            startActivity(intent)
+        }
 
         deleteButton.setOnClickListener {
             showConfirmDeleteDialog(
