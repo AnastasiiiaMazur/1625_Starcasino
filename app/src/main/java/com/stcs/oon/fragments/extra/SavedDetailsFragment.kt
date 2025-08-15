@@ -19,7 +19,9 @@ import org.osmdroid.views.overlay.Marker
 import android.net.Uri
 import android.view.ViewGroup
 import android.widget.*
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import com.stcs.oon.db.AppDatabase
 import com.stcs.oon.db.RideEntity
 import kotlinx.coroutines.*
@@ -32,6 +34,9 @@ import com.stcs.oon.fragments.helpers.OrsClient
 import com.stcs.oon.fragments.helpers.OrsDirectionsBody
 import com.stcs.oon.fragments.helpers.OrsOptions
 import com.stcs.oon.fragments.helpers.OrsRoundTrip
+import com.stcs.oon.fragments.helpers.UnitSystem
+import com.stcs.oon.fragments.helpers.Units
+import com.stcs.oon.fragments.helpers.UserPrefs
 import com.stcs.oon.fragments.helpers.installHideKeyboardOnTouchOutside
 import org.osmdroid.util.BoundingBox
 
@@ -70,6 +75,9 @@ class SavedDetailsFragment : Fragment(R.layout.fradment_saved_details) {
     private val ors by lazy { OrsClient.create(logging = false) }
     private var routeJob: Job? = null
     private var routePolyline: Polyline? = null
+
+    private var currentUnit: UnitSystem = UnitSystem.METRIC
+    private var unitCollectorJob: Job? = null
 
     private val pickImage = registerForActivityResult(
         ActivityResultContracts.GetContent()
@@ -113,10 +121,19 @@ class SavedDetailsFragment : Fragment(R.layout.fradment_saved_details) {
         im2Delete = view.findViewById(R.id.im2Delete)
         im3Delete = view.findViewById(R.id.im3Delete)
 
-
         view.isClickable = true
         view.isFocusableInTouchMode = true
         view.installHideKeyboardOnTouchOutside()
+
+        // Observe unit system
+        unitCollectorJob = viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                UserPrefs.unitFlow(requireContext()).collect { unit ->
+                    currentUnit = unit
+                    if (::ride.isInitialized) applyDistanceAndDuration()
+                }
+            }
+        }
 
         // osmdroid init
         val base = requireContext().cacheDir.resolve("osmdroid")
@@ -129,7 +146,7 @@ class SavedDetailsFragment : Fragment(R.layout.fradment_saved_details) {
         mapView.setMultiTouchControls(false)
 
         // load ride by id then bind + draw route
-        val rideId = requireArguments().getLong("arg_ride_id")
+        val rideId = requireArguments().getLong(ARG_RIDE_ID)
         viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
             val dao = AppDatabase.getInstance(requireContext()).rideDao()
             val loaded = dao.getById(rideId)
@@ -188,7 +205,6 @@ class SavedDetailsFragment : Fragment(R.layout.fradment_saved_details) {
             selectedImageSlot = 3; pickImage.launch("image/*")
         }
 
-        // delete slot icons (edit mode only – clearing preview + state)
         im1Delete.setOnClickListener {
             if (!isEditing) return@setOnClickListener
             deleteLocalFileIfAny(image1Uri); image1Uri = null; im1.setImageResource(R.drawable.ic_camera)
@@ -209,20 +225,15 @@ class SavedDetailsFragment : Fragment(R.layout.fradment_saved_details) {
         rideTitleEdit.setText(titleText)
 
         dateTv.text = formatRideDate(ride.createdAt, longMonth = true)
+        applyDistanceAndDuration() // <- unit-aware
 
-        val km = ride.distanceMeters / 1000.0
-        distanceDurationTv.text = "${formatKm(km)} km, ${formatDuration(ride.durationSeconds)}"
-
-        // stars
         currentRating = ride.rating ?: 0
         inflateStars()
         renderStars(currentRating)
 
-        // description
         descriptionEt.setText(ride.description ?: "")
         descriptionEt.isEnabled = false
 
-        // images
         image1Uri = ride.im1Uri
         image2Uri = ride.im2Uri
         image3Uri = ride.im3Uri
@@ -230,8 +241,12 @@ class SavedDetailsFragment : Fragment(R.layout.fradment_saved_details) {
         setImageFromDb(im2, image2Uri)
         setImageFromDb(im3, image3Uri)
 
-        // default: not editing
         toggleEditMode(false)
+    }
+
+    private fun applyDistanceAndDuration() {
+        val dist = Units.formatDistance(ride.distanceMeters, currentUnit)
+        distanceDurationTv.text = "$dist, ${formatDuration(ride.durationSeconds)}"
     }
 
     // --- Images helpers ---
@@ -385,7 +400,7 @@ class SavedDetailsFragment : Fragment(R.layout.fradment_saved_details) {
         val startMarker = Marker(mapView).apply {
             position = start
             setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
-            this.title = "Start" // avoid name clash with local 'titleText'
+            this.title = "Start"
         }
         mapView.overlays.add(startMarker)
 
@@ -409,6 +424,11 @@ class SavedDetailsFragment : Fragment(R.layout.fradment_saved_details) {
     // MapView lifecycle
     override fun onResume() { super.onResume(); mapView.onResume() }
     override fun onPause() { mapView.onPause(); super.onPause() }
+    override fun onDestroyView() {
+        routeJob?.cancel()
+        unitCollectorJob?.cancel()
+        super.onDestroyView()
+    }
 
     // Formatting helpers
     private fun formatRideDate(epochMillis: Long, longMonth: Boolean = true): String {
@@ -416,7 +436,6 @@ class SavedDetailsFragment : Fragment(R.layout.fradment_saved_details) {
         val sdf = SimpleDateFormat(pattern, Locale.getDefault())
         return sdf.format(Date(epochMillis))
     }
-    private fun formatKm(km: Double): String = String.format(Locale.US, "%.1f", km)
     private fun formatDuration(seconds: Long): String {
         val h = seconds / 3600
         val m = (seconds % 3600) / 60

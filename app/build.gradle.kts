@@ -53,8 +53,6 @@ dependencies {
     implementation("com.github.PhilJay:MPAndroidChart:v3.1.0")
     implementation("org.osmdroid:osmdroid-android:6.1.20")
     implementation("org.osmdroid:osmdroid-wms:6.1.20")
-    implementation("com.squareup.okhttp3:okhttp:4.12.0")
-    implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
     implementation("com.squareup.retrofit2:retrofit:2.11.0")
     implementation("com.squareup.retrofit2:converter-gson:2.11.0")
     // Room
@@ -65,4 +63,10 @@ dependencies {
     // JSON (since we serialize the polyline)
     implementation("com.google.code.gson:gson:2.11.0")
     implementation("androidx.datastore:datastore-preferences:1.1.7")
+
+    //okttp3 + glide
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
+    implementation("com.squareup.okhttp3:okhttp-urlconnection:4.12.0")
+    implementation("com.github.bumptech.glide:glide:4.16.0")
 }

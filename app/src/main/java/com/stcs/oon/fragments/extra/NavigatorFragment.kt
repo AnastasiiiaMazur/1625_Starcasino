@@ -37,6 +37,12 @@ import kotlin.math.cos
 import kotlin.math.floor
 import kotlin.math.hypot
 import kotlin.math.roundToInt
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.repeatOnLifecycle
+import com.stcs.oon.fragments.helpers.UnitSystem
+import com.stcs.oon.fragments.helpers.Units
+import com.stcs.oon.fragments.helpers.UserPrefs
+
 
 class NavigatorFragment : Fragment(R.layout.fragment_navigator) {
 
@@ -62,10 +68,14 @@ class NavigatorFragment : Fragment(R.layout.fragment_navigator) {
     private var accumulatedSec: Long = 0L
     private var tickerJob: Job? = null
 
-    // arguments
-    private var rideIdArg: Long? = null    // set when coming from ManualRoute
-    private var specArg: RouteSpec? = null // set when coming from NewRoute
+    // args + data
+    private var rideIdArg: Long? = null
+    private var specArg: RouteSpec? = null
     private var loadedRide: RideEntity? = null
+
+    // unit system
+    private var currentUnit: UnitSystem = UnitSystem.METRIC
+    private var unitCollectorJob: Job? = null
 
     companion object {
         const val ARG_RIDE_ID = "arg_ride_id"
@@ -107,6 +117,16 @@ class NavigatorFragment : Fragment(R.layout.fragment_navigator) {
             return
         }
 
+        // observe unit system
+        unitCollectorJob = viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                UserPrefs.unitFlow(requireContext()).collect { unit ->
+                    currentUnit = unit
+                    refreshHeaderDistance() // redraw header distance on unit change
+                }
+            }
+        }
+
         // location permission helper
         locationRequester = LocationPermissionRequester(
             fragment = this,
@@ -117,18 +137,16 @@ class NavigatorFragment : Fragment(R.layout.fragment_navigator) {
             }
         )
 
-        // wiring buttons
+        // buttons
         startNavBtn.setOnClickListener { toggleStartStop() }
         saveRouteBtn.setOnClickListener { onSavePressed() }
 
         // draw route
         if (rideIdArg != null) {
-            // manual route path: load ride and draw its saved polyline/spec
             loadRideAndDraw(rideIdArg!!)
         } else {
-            // auto route path: fetch via ORS from spec
             val spec = specArg!!
-            bindHeaderFromSpec(spec)
+            bindHeaderFromSpec(spec)           // sets distance/time/difficulty with units
             fetchJob?.cancel()
             fetchJob = viewLifecycleOwner.lifecycleScope.launch {
                 try {
@@ -146,6 +164,7 @@ class NavigatorFragment : Fragment(R.layout.fragment_navigator) {
     override fun onDestroyView() {
         fetchJob?.cancel()
         tickerJob?.cancel()
+        unitCollectorJob?.cancel()
         myLocationOverlay?.disableMyLocation()
         myLocationOverlay = null
         routePolyline = null
@@ -164,8 +183,8 @@ class NavigatorFragment : Fragment(R.layout.fragment_navigator) {
                     findNavController().popBackStack()
                 } else {
                     loadedRide = ride
-                    bindHeaderFromRide(ride)
-                    // draw from saved polyline if present; else regenerate from spec
+                    bindHeaderFromRide(ride) // unit-aware
+                    // draw saved polyline or regenerate
                     val pts: List<GeoPoint> = ride.polylineJson?.let { json ->
                         try {
                             val list = Gson().fromJson(json, Array<LatLngDto>::class.java).toList()
@@ -199,17 +218,28 @@ class NavigatorFragment : Fragment(R.layout.fragment_navigator) {
     }
 
     private fun bindHeaderFromRide(ride: RideEntity) {
-        // Use saved stats first; timer will override when running
-        distanceTv.text = "${(ride.distanceMeters / 1000.0).roundToInt()} km"
+        distanceTv.text = Units.formatDistance(ride.distanceMeters, currentUnit)
         timeTv.text = formatDuration(ride.durationSeconds)
         val diff = (ride.difficulty ?: difficultyForDistance(ride.distanceMeters)).coerceIn(1, 5)
         difficultyTv.text = "$diff/5"
     }
 
     private fun bindHeaderFromSpec(spec: RouteSpec) {
-        distanceTv.text = "${(spec.lengthMeters / 1000.0).roundToInt()} km"
+        distanceTv.text = Units.formatDistance(spec.lengthMeters, currentUnit)
         timeTv.text = "~" + estimateTimeText(spec.lengthMeters)
         difficultyTv.text = "${difficultyForDistance(spec.lengthMeters)}/5"
+    }
+
+    /** Re-apply the distance text when units change (keeps current context). */
+    private fun refreshHeaderDistance() {
+        loadedRide?.let {
+            distanceTv.text = Units.formatDistance(it.distanceMeters, currentUnit)
+            return
+        }
+        specArg?.let {
+            distanceTv.text = Units.formatDistance(it.lengthMeters, currentUnit)
+            return
+        }
     }
 
     // ------------------- Start/Stop/Resume -------------------
@@ -217,13 +247,11 @@ class NavigatorFragment : Fragment(R.layout.fragment_navigator) {
     private fun toggleStartStop() {
         when (navState) {
             NavState.IDLE, NavState.PAUSED -> {
-                // start/resume
-                locationRequester.request() // will call startFollowingIfNeeded()
+                locationRequester.request()
                 startTimer()
                 navState = NavState.RUNNING
             }
             NavState.RUNNING -> {
-                // stop (pause)
                 stopTimer()
                 navState = NavState.PAUSED
             }
@@ -293,6 +321,7 @@ class NavigatorFragment : Fragment(R.layout.fragment_navigator) {
         val diff = difficultyForDistance(distanceMeters)
 
         if (rideIdArg != null) {
+            // Update existing (manual route path)
             viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
                 val dao = AppDatabase.getInstance(requireContext()).rideDao()
                 dao.updateTrackingStats(
@@ -304,11 +333,11 @@ class NavigatorFragment : Fragment(R.layout.fragment_navigator) {
                 )
                 withContext(Dispatchers.Main) {
                     Toast.makeText(requireContext(), "Ride updated", Toast.LENGTH_SHORT).show()
-                    findNavController().navigate(R.id.savedRoutesFragment) // <- your list screen id
+                    findNavController().navigate(R.id.savedRoutesFragment)
                 }
             }
         } else {
-            // INSERT new (auto route path)
+            // Insert new (auto-route path)
             val spec = specArg!!
             val entity = RideEntity(
                 name = "",
@@ -381,6 +410,7 @@ class NavigatorFragment : Fragment(R.layout.fragment_navigator) {
     // ------------------- helpers -------------------
 
     private fun estimateTimeText(distanceMeters: Int): String {
+        // stays meter-based; units affect only distance display, not ETA math
         val hours = distanceMeters / 1000.0 / 15.0
         val h = floor(hours).toInt()
         val m = ((hours - h) * 60).roundToInt()
@@ -452,6 +482,7 @@ class NavigatorFragment : Fragment(R.layout.fragment_navigator) {
         return out
     }
 }
+
 
 
 

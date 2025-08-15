@@ -12,7 +12,9 @@ import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.fragment.findNavController
 import com.stcs.oon.R
 import com.stcs.oon.db.LatLngDto
@@ -31,8 +33,13 @@ import kotlinx.coroutines.*
 import com.stcs.oon.db.RouteSpec
 import com.stcs.oon.fragments.helpers.OrsOptions
 import org.osmdroid.views.overlay.MapEventsOverlay
-import org.osmdroid.events.MapEventsReceiver   // <-- not in views.overlay
+import org.osmdroid.events.MapEventsReceiver
 import org.osmdroid.views.overlay.Marker
+import com.stcs.oon.fragments.helpers.UserPrefs
+import com.stcs.oon.fragments.helpers.UnitSystem
+import com.stcs.oon.fragments.helpers.Units
+import kotlin.math.cos
+import kotlin.math.hypot
 
 
 class NewRouteFragment : Fragment(R.layout.fragment_new_route) {
@@ -60,7 +67,7 @@ class NewRouteFragment : Fragment(R.layout.fragment_new_route) {
     // Drawn route
     private var routePolyline: Polyline? = null
 
-    // ----- UI state -----
+    // UI state
     private enum class StartOption { MY_LOCATION, MANUAL }
     private enum class RouteType { TWISTY, SCENIC, FLAT }
     private enum class Direction { CLOCKWISE, COUNTERCLOCKWISE, RANDOM }
@@ -68,7 +75,12 @@ class NewRouteFragment : Fragment(R.layout.fragment_new_route) {
     private var selectedStart = StartOption.MY_LOCATION
     private var selectedType = RouteType.TWISTY
     private var selectedDir = Direction.CLOCKWISE
-    private var distanceKm = 0
+
+    // Slider value in *user* units (km or mi)
+    private var distanceUnits = 0
+
+    // Unit system (default METRIC)
+    private var currentUnit: UnitSystem = UnitSystem.METRIC
 
     // SeekBar popup
     private lateinit var kmPopup: PopupWindow
@@ -80,11 +92,10 @@ class NewRouteFragment : Fragment(R.layout.fragment_new_route) {
     private var randomSeed = 1
 
     companion object {
-        private const val ARG_ROUTE_SPEC = "arg_route_spec"
+        const val ARG_ROUTE_SPEC = "arg_route_spec"
     }
 
     private var previewPoints: List<GeoPoint> = emptyList()
-    private var lastProfile: String = "cycling-regular"
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
@@ -101,37 +112,36 @@ class NewRouteFragment : Fragment(R.layout.fragment_new_route) {
         randomRoute = view.findViewById(R.id.randomRoute)
         startRouteBtn = view.findViewById(R.id.startRouteBtn)
 
+        // osmdroid
         val base = requireContext().cacheDir.resolve("osmdroid")
-        val tiles = base.resolve("tiles")
         Configuration.getInstance().apply {
             userAgentValue = requireContext().packageName
             osmdroidBasePath = base
-            osmdroidTileCache = tiles
+            osmdroidTileCache = base.resolve("tiles")
         }
-
         mapView.setMultiTouchControls(true)
         mapView.setTileSource(TileSourceFactory.MAPNIK)
 
         setupUiGroups()
-        setupKmSeekbar()
+        setupSeekbar()
+        observeUnitSystem()
 
         startRouteBtn.setOnClickListener {
-            if (selectedStart == StartOption.MANUAL && startCenter == null) {
+            val center = startCenter ?: run {
                 Toast.makeText(requireContext(), "Tap the map to set a start point", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
-            val center = startCenter ?: return@setOnClickListener
-
             val profile = when (selectedType) {
                 RouteType.SCENIC -> "cycling-regular"
                 RouteType.FLAT   -> "cycling-road"
                 RouteType.TWISTY -> "cycling-mountain"
             }
             val seed = if (selectedDir == Direction.RANDOM) randomSeed else 1
+            val lengthMeters = Units.userDistanceToMeters(distanceUnits, currentUnit)
 
             val spec = RouteSpec(
                 start = LatLngDto(center.latitude, center.longitude),
-                lengthMeters = distanceKm * 1000,
+                lengthMeters = lengthMeters,
                 profile = profile,
                 seed = seed,
                 dir = selectedDir.name
@@ -140,10 +150,13 @@ class NewRouteFragment : Fragment(R.layout.fragment_new_route) {
             routeJob?.cancel()
             myLocationOverlay?.disableFollowLocation()
 
-            val args = android.os.Bundle().apply { putParcelable(ARG_ROUTE_SPEC, spec) }
-            findNavController().navigate(R.id.navigatorFragment, args)
+            findNavController().navigate(
+                R.id.navigatorFragment,
+                Bundle().apply { putParcelable(ARG_ROUTE_SPEC, spec) }
+            )
         }
 
+        // Location / my-location overlay
         locationRequester = LocationPermissionRequester(
             fragment = this,
             onGranted = {
@@ -152,6 +165,7 @@ class NewRouteFragment : Fragment(R.layout.fragment_new_route) {
                     mapView.controller.setZoom(15.0)
                     mapView.controller.setCenter(it)
                     requestRoute()
+                    updateStartBtnState()
                 }
                 myLocationOverlay = LocationKit.attachMyLocationOverlay(
                     mapView = mapView,
@@ -162,6 +176,7 @@ class NewRouteFragment : Fragment(R.layout.fragment_new_route) {
                         startCenter = firstFix
                         mapView.controller.animateTo(firstFix)
                         requestRoute()
+                        updateStartBtnState()
                     }
                 }
                 mapView.overlays.add(myLocationOverlay)
@@ -180,30 +195,55 @@ class NewRouteFragment : Fragment(R.layout.fragment_new_route) {
         routeJob?.cancel()
         myLocationOverlay?.disableMyLocation()
         myLocationOverlay = null
+
+        startMarker?.let { mapView.overlays.remove(it) }; startMarker = null
+        mapTapOverlay?.let { mapView.overlays.remove(it) }; mapTapOverlay = null
+        routePolyline?.let { mapView.overlays.remove(it) }; routePolyline = null
         super.onDestroyView()
     }
 
-    // ----- UI groups -----
+    // ---------- Unit system ----------
+    private fun observeUnitSystem() {
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                UserPrefs.unitFlow(requireContext()).collect { unit ->
+                    currentUnit = unit
+                    applyUnitToSeekbar()
+                    updateStartBtnState()
+                    requestRoute(debounce = true)
+                }
+            }
+        }
+    }
+
+    private fun applyUnitToSeekbar() {
+        // 100 km vs ~62 mi
+        val newMax = if (currentUnit == UnitSystem.IMPERIAL) 62 else 100
+        val old = kmSeekBar.progress
+        kmSeekBar.max = newMax
+        kmSeekBar.progress = old.coerceAtMost(newMax)
+        distanceUnits = kmSeekBar.progress
+        if (kmPopup.isShowing) showAndPositionKm(kmSeekBar.progress)
+    }
+
+    // ---------- UI groups ----------
     private fun setupUiGroups() {
         setupSingleSelect(listOf(startLocation, startManualLocation), 0) { id ->
             if (id == R.id.startLocation) {
                 selectedStart = StartOption.MY_LOCATION
                 exitManualStartMode()
                 myLocationOverlay?.enableFollowLocation()
-                // use current device location if we have it
-                myLocationOverlay?.myLocation?.let {
-                    startCenter = GeoPoint(it.latitude, it.longitude)
-                }
+                myLocationOverlay?.myLocation?.let { startCenter = GeoPoint(it.latitude, it.longitude) }
+                updateStartBtnState()
                 requestRoute()
             } else {
                 selectedStart = StartOption.MANUAL
                 myLocationOverlay?.disableFollowLocation()
                 enterManualStartMode()
                 Toast.makeText(requireContext(), "Tap the map (or drag the pin) to set the start", Toast.LENGTH_SHORT).show()
+                updateStartBtnState()
             }
         }
-
-        // Route type
         setupSingleSelect(listOf(twistyRoute, scenicRoute, flatRoute), 0) { id ->
             selectedType = when (id) {
                 R.id.twistyRoute -> RouteType.TWISTY
@@ -212,8 +252,6 @@ class NewRouteFragment : Fragment(R.layout.fragment_new_route) {
             }
             requestRoute()
         }
-
-        // Direction
         setupSingleSelect(listOf(clockwiseRoute, counterclockwiseRoute, randomRoute), 0) { id ->
             selectedDir = when (id) {
                 R.id.clockwiseRoute -> Direction.CLOCKWISE
@@ -226,21 +264,13 @@ class NewRouteFragment : Fragment(R.layout.fragment_new_route) {
     }
 
     private fun enterManualStartMode() {
-        // overlay to capture taps
         if (mapTapOverlay == null) {
             mapTapOverlay = MapEventsOverlay(object : MapEventsReceiver {
-                override fun singleTapConfirmedHelper(p: GeoPoint?): Boolean {
-                    p?.let { setManualStart(it) }
-                    return true
-                }
-                override fun longPressHelper(p: GeoPoint?): Boolean {
-                    p?.let { setManualStart(it) }
-                    return true
-                }
+                override fun singleTapConfirmedHelper(p: GeoPoint?): Boolean { p?.let { setManualStart(it) }; return true }
+                override fun longPressHelper(p: GeoPoint?) = false
             })
             mapView.overlays.add(0, mapTapOverlay)
         }
-
         if (startMarker == null) {
             startMarker = Marker(mapView).apply {
                 title = "Start"
@@ -249,26 +279,22 @@ class NewRouteFragment : Fragment(R.layout.fragment_new_route) {
                 setOnMarkerDragListener(object : Marker.OnMarkerDragListener {
                     override fun onMarkerDragStart(marker: Marker?) {}
                     override fun onMarkerDrag(marker: Marker?) {}
-                    override fun onMarkerDragEnd(marker: Marker?) {
-                        marker?.position?.let { setManualStart(it) }
-                    }
+                    override fun onMarkerDragEnd(marker: Marker?) { marker?.position?.let { setManualStart(it) } }
                 })
             }
             mapView.overlays.add(startMarker)
         }
-
         if (startCenter == null) {
-            startCenter = mapView.mapCenter as GeoPoint
-            startMarker?.position = startCenter
-            mapView.invalidate()
+            val mc = mapView.mapCenter
+            startCenter = GeoPoint(mc.latitude, mc.longitude)
         }
+        startMarker?.position = startCenter
+        mapView.invalidate()
     }
 
     private fun exitManualStartMode() {
-        mapTapOverlay?.let { mapView.overlays.remove(it) }
-        mapTapOverlay = null
-        startMarker?.let { mapView.overlays.remove(it) }
-        startMarker = null
+        mapTapOverlay?.let { mapView.overlays.remove(it) }; mapTapOverlay = null
+        startMarker?.let { mapView.overlays.remove(it) }; startMarker = null
         mapView.invalidate()
     }
 
@@ -276,6 +302,7 @@ class NewRouteFragment : Fragment(R.layout.fragment_new_route) {
         startCenter = p
         startMarker?.position = p
         mapView.controller.animateTo(p)
+        updateStartBtnState()
         requestRoute()
     }
 
@@ -298,19 +325,18 @@ class NewRouteFragment : Fragment(R.layout.fragment_new_route) {
         (container.getChildAt(0) as? ImageView)?.isEnabled = selected
     }
 
-    // ----- SeekBar + popup -----
-    private fun setupKmSeekbar() {
-        kmSeekBar.max = 100
+    // ---------- SeekBar + popup ----------
+    private fun setupSeekbar() {
+        kmSeekBar.max = if (currentUnit == UnitSystem.IMPERIAL) 62 else 100
         kmSeekBar.progress = 0
-        distanceKm = 0
+        distanceUnits = 0
 
         kmPopupText = TextView(requireContext()).apply {
             textSize = 16f
             setPadding(dp(8), dp(4), dp(8), dp(4))
             setTextColor(0xFF000000.toInt())
             background = android.graphics.drawable.GradientDrawable().apply {
-                setColor(0xFFFFFFFF.toInt())
-                cornerRadius = dp(12).toFloat()
+                setColor(0xFFFFFFFF.toInt()); cornerRadius = dp(12).toFloat()
                 setStroke(dp(1), 0xFFCCCCCC.toInt())
             }
             elevation = dp(4).toFloat()
@@ -321,15 +347,16 @@ class NewRouteFragment : Fragment(R.layout.fragment_new_route) {
             override fun onStartTrackingTouch(sb: SeekBar) { showAndPositionKm(sb.progress) }
             override fun onProgressChanged(sb: SeekBar, p: Int, fromUser: Boolean) {
                 if (fromUser) showAndPositionKm(p)
-                distanceKm = p
-                requestRoute(debounce = true) // live update with debounce
+                distanceUnits = p
+                updateStartBtnState()
+                requestRoute(debounce = true)
             }
             override fun onStopTrackingTouch(sb: SeekBar) { kmPopup.dismiss() }
         })
     }
 
     private fun showAndPositionKm(progress: Int) {
-        kmPopupText.text = "$progress km"
+        kmPopupText.text = "$progress ${if (currentUnit == UnitSystem.IMPERIAL) "mi" else "km"}"
         kmPopupText.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED)
         val popW = kmPopupText.measuredWidth
 
@@ -338,7 +365,7 @@ class NewRouteFragment : Fragment(R.layout.fragment_new_route) {
         val available = sb.width - sb.paddingLeft - sb.paddingRight
         val thumbCenterX = sb.paddingLeft + (available * fraction).toInt()
 
-        var xOff = (thumbCenterX - popW / 2).coerceIn(0, sb.width - popW)
+        val xOff = (thumbCenterX - popW / 2).coerceIn(0, sb.width - popW)
         val yOff = dp(8)
 
         if (kmPopup.isShowing) kmPopup.update(sb, xOff, yOff, -1, -1)
@@ -347,9 +374,15 @@ class NewRouteFragment : Fragment(R.layout.fragment_new_route) {
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
+    private fun updateStartBtnState() {
+        startRouteBtn.isEnabled = (distanceUnits > 0 && startCenter != null)
+    }
+
+    // ---------- Routing preview ----------
     private fun requestRoute(debounce: Boolean = false) {
-        val center = startCenter ?: return
-        if (distanceKm <= 0) { drawPolyline(emptyList()); return }
+        val center = startCenter ?: run { drawPolyline(emptyList()); return }
+        val lengthMeters = Units.userDistanceToMeters(distanceUnits, currentUnit)
+        if (lengthMeters <= 0) { drawPolyline(emptyList()); return }
 
         routeJob?.cancel()
         routeJob = viewLifecycleOwner.lifecycleScope.launch {
@@ -364,35 +397,26 @@ class NewRouteFragment : Fragment(R.layout.fragment_new_route) {
 
             try {
                 val body = OrsDirectionsBody(
-                    coordinates = listOf(listOf(center.longitude, center.latitude)), // start only (round-trip)
-                    options = OrsOptions(roundTrip = OrsRoundTrip(length = distanceKm * 1000, seed = seed))
+                    coordinates = listOf(listOf(center.longitude, center.latitude)),
+                    options = OrsOptions(roundTrip = OrsRoundTrip(length = lengthMeters, seed = seed))
                 )
                 val apiKey = getString(R.string.ors_api_key)
                 val resp = withContext(Dispatchers.IO) { ors.routeGeoJson(apiKey, profile, body) }
 
-                var points = resp.features.firstOrNull()?.geometry?.coordinates
-                    ?.map { ll -> GeoPoint(ll[1], ll[0]) }
+                var pts = resp.features.firstOrNull()?.geometry?.coordinates
                     .orEmpty()
+                    .map { ll -> GeoPoint(ll[1], ll[0]) }
+                if (selectedDir == Direction.COUNTERCLOCKWISE) pts = pts.asReversed()
 
-                points = when (selectedDir) {
-                    Direction.CLOCKWISE        -> points
-                    Direction.COUNTERCLOCKWISE -> points.asReversed()
-                    Direction.RANDOM           -> points
-                }
-
-                val simplified = withContext(Dispatchers.Default) { simplifyForMap(points).let { capPoints(it, 400) } }
-
+                val simplified = withContext(Dispatchers.Default) { simplifyForMap(pts).let { capPoints(it, 400) } }
                 previewPoints = simplified
-                lastProfile = profile
-                startRouteBtn.isEnabled = simplified.isNotEmpty()
-
                 drawPolyline(simplified)
-
-                Log.d("Route", "raw=${points.size}, simplified=${simplified.size}, lenKm=$distanceKm")
-            } catch (e: CancellationException) {
+            } catch (_: CancellationException) {
             } catch (e: Exception) {
                 Toast.makeText(requireContext(), "Routing failed: ${e.message}", Toast.LENGTH_SHORT).show()
                 drawPolyline(emptyList())
+            } finally {
+                updateStartBtnState()
             }
         }
     }
@@ -400,13 +424,12 @@ class NewRouteFragment : Fragment(R.layout.fragment_new_route) {
     private fun drawPolyline(points: List<GeoPoint>) {
         routePolyline?.let { mapView.overlays.remove(it) }
         routePolyline = null
-
         if (points.isEmpty()) { mapView.invalidate(); return }
 
         routePolyline = Polyline().apply {
             setPoints(points)
             outlinePaint.strokeWidth = 6f
-            outlinePaint.color = 0xFFE53935.toInt() // red-ish
+            outlinePaint.color = 0xFFE53935.toInt()
         }
         mapView.overlays.add(routePolyline)
 
@@ -415,8 +438,7 @@ class NewRouteFragment : Fragment(R.layout.fragment_new_route) {
         mapView.invalidate()
     }
 
-    // --- Polyline simplification & capping ---
-
+    // ---------- Simplify ----------
     private fun simplifyForMap(points: List<GeoPoint>, toleranceMeters: Double = 10.0, maxPoints: Int = 400): List<GeoPoint> {
         if (points.size <= 2) return points
         val dp = douglasPeucker(points, toleranceMeters)
@@ -432,58 +454,41 @@ class NewRouteFragment : Fragment(R.layout.fragment_new_route) {
         return out
     }
 
-    // Douglas–Peucker in meters (approx), using simple meters-per-degree projection
     private fun douglasPeucker(points: List<GeoPoint>, toleranceMeters: Double): List<GeoPoint> {
         val n = points.size
         if (n < 3) return points
-        val keep = BooleanArray(n)
-        keep[0] = true
-        keep[n - 1] = true
+        val keep = BooleanArray(n).apply { this[0] = true; this[n - 1] = true }
 
         val refLat = points.first().latitude
-        fun toXY(p: GeoPoint): Pair<Double, Double> {
-            val mPerDegLat = 111_320.0
-            val mPerDegLon = 111_320.0 * kotlin.math.cos(Math.toRadians(refLat))
-            return Pair(p.longitude * mPerDegLon, p.latitude * mPerDegLat)
-        }
+        val mPerDegLat = 111_320.0
+        val mPerDegLon = 111_320.0 * cos(Math.toRadians(refLat))
+        fun toXY(p: GeoPoint) = Pair(p.longitude * mPerDegLon, p.latitude * mPerDegLat)
         val xy = points.map { toXY(it) }
 
-        fun perpDist(idx: Int, a: Int, b: Int): Double {
-            val (x, y) = xy[idx]
-            val (x1, y1) = xy[a]
-            val (x2, y2) = xy[b]
-            if (x1 == x2 && y1 == y2) {
-                val dx = x - x1; val dy = y - y1
-                return kotlin.math.hypot(dx, dy)
-            }
+        fun perpDist(i: Int, a: Int, b: Int): Double {
+            val (x, y) = xy[i]; val (x1, y1) = xy[a]; val (x2, y2) = xy[b]
+            if (x1 == x2 && y1 == y2) return hypot(x - x1, y - y1)
             val dx = x2 - x1; val dy = y2 - y1
             val t = ((x - x1) * dx + (y - y1) * dy) / (dx*dx + dy*dy)
             val clamped = t.coerceIn(0.0, 1.0)
-            val projX = x1 + clamped * dx
-            val projY = y1 + clamped * dy
-            return kotlin.math.hypot(x - projX, y - projY)
+            val px = x1 + clamped * dx; val py = y1 + clamped * dy
+            return hypot(x - px, y - py)
         }
 
-        fun recurse(a: Int, b: Int) {
-            var maxDist = 0.0
-            var idx = -1
+        fun rec(a: Int, b: Int) {
+            var maxD = 0.0; var idx = -1
             for (i in a + 1 until b) {
                 val d = perpDist(i, a, b)
-                if (d > maxDist) { maxDist = d; idx = i }
+                if (d > maxD) { maxD = d; idx = i }
             }
-            if (maxDist > toleranceMeters && idx != -1) {
-                keep[idx] = true
-                recurse(a, idx)
-                recurse(idx, b)
-            }
+            if (maxD > toleranceMeters && idx != -1) { keep[idx] = true; rec(a, idx); rec(idx, b) }
         }
-        recurse(0, n - 1)
-
+        rec(0, n - 1)
         val out = ArrayList<GeoPoint>()
         for (i in 0 until n) if (keep[i]) out.add(points[i])
         return out
     }
-
 }
+
 
 

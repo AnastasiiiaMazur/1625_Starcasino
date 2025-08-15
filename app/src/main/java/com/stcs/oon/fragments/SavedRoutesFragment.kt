@@ -20,7 +20,10 @@ import com.stcs.oon.db.RideEntity
 import com.stcs.oon.db.LatLngDto
 import com.stcs.oon.db.RouteSpec
 import com.stcs.oon.fragments.extra.SavedDetailsFragment
+import com.stcs.oon.fragments.helpers.UnitSystem
+import com.stcs.oon.fragments.helpers.UserPrefs
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.osmdroid.config.Configuration
@@ -29,14 +32,12 @@ import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.overlay.Marker
 import java.util.Locale
 
-class SavedRoutesFragment: Fragment(R.layout.fragment_saved_routes) {
+class SavedRoutesFragment : Fragment(R.layout.fragment_saved_routes) {
 
     private lateinit var ridesContainer: LinearLayout
-    private val mapViews = mutableListOf<MapView>() // to forward lifecycle
+    private val mapViews = mutableListOf<MapView>()
 
-    companion object {
-        private const val ARG_ROUTE_SPEC = "arg_route_spec"
-    }
+    private var unit: UnitSystem = UnitSystem.METRIC
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
@@ -48,7 +49,14 @@ class SavedRoutesFragment: Fragment(R.layout.fragment_saved_routes) {
             osmdroidBasePath = base
             osmdroidTileCache = base.resolve("tiles")
         }
-        loadRides()
+
+        // Observe unit preference and reload list whenever it changes
+        viewLifecycleOwner.lifecycleScope.launch {
+            UserPrefs.unitFlow(requireContext()).collectLatest { u ->
+                unit = u
+                loadRides()
+            }
+        }
     }
 
     private fun loadRides() {
@@ -68,12 +76,13 @@ class SavedRoutesFragment: Fragment(R.layout.fragment_saved_routes) {
             val item = layoutInflater.inflate(R.layout.saved_ride_item, ridesContainer, false)
 
             val titleTv = item.findViewById<TextView>(R.id.rideTitle)
-            val dateTv = item.findViewById<TextView>(R.id.rideDate)
-            val distTv = item.findViewById<TextView>(R.id.rideDistance)
+            val dateTv  = item.findViewById<TextView>(R.id.rideDate)
+            val distTv  = item.findViewById<TextView>(R.id.rideDistance)
             val viewBtn = item.findViewById<TextView>(R.id.view)
-            val delBtn = item.findViewById<TextView>(R.id.delete)
-            val map = item.findViewById<MapView>(R.id.mapView)
+            val delBtn  = item.findViewById<TextView>(R.id.delete)
+            val map     = item.findViewById<MapView>(R.id.mapView)
 
+            // map thumb
             map.setMultiTouchControls(false)
             map.setTileSource(TileSourceFactory.MAPNIK)
             val start = GeoPoint(ride.startLat, ride.startLon)
@@ -87,12 +96,12 @@ class SavedRoutesFragment: Fragment(R.layout.fragment_saved_routes) {
             }
             mapViews.add(map)
 
-            // Texts
+            // texts
             titleTv.text = if (ride.name.isNotBlank()) ride.name else "Route ${ride.id}"
-            dateTv.text = "—"
-            val km = ride.distanceMeters / 1000.0
-            distTv.text = "${formatKm(km)} km, ${formatDuration(ride.durationSeconds)}"
-            dateTv.text = formatRideDate(ride.createdAt, longMonth = true)
+            dateTv.text  = formatRideDate(ride.createdAt, longMonth = true)
+
+            val dist = metersToUnit(ride.distanceMeters) // uses current 'unit'
+            distTv.text = "${formatNum(dist)} ${distanceUnitLabel()}, ${formatDuration(ride.durationSeconds)}"
 
             viewBtn.setOnClickListener {
                 val args = Bundle().apply { putLong("arg_ride_id", ride.id) }
@@ -109,36 +118,32 @@ class SavedRoutesFragment: Fragment(R.layout.fragment_saved_routes) {
                                 ridesContainer.removeView(item)
                             }
                         }
-                    },
-                    onNo = { /* optional: do nothing */ }
+                    }
                 )
             }
-
 
             ridesContainer.addView(item)
         }
     }
 
     // ---------- Lifecycle -> forward to all MapViews ----------
-    override fun onResume() {
-        super.onResume()
-        mapViews.forEach { it.onResume() }
-    }
-    override fun onPause() {
-        mapViews.forEach { it.onPause() }
-        super.onPause()
-    }
+    override fun onResume() { super.onResume(); mapViews.forEach { it.onResume() } }
+    override fun onPause()  { mapViews.forEach { it.onPause() }; super.onPause() }
     override fun onDestroyView() {
-        mapViews.forEach { mv ->
-            mv.overlays.clear()
-        }
+        mapViews.forEach { it.overlays.clear() }
         mapViews.clear()
         super.onDestroyView()
     }
 
-    // ---------- Helpers ----------
-    private fun formatKm(km: Double): String =
-        String.format(Locale.US, "%.1f", km)
+    // ---------- Unit helpers (use current 'unit') ----------
+    private fun metersToUnit(meters: Number): Double {
+        val m = meters.toDouble()
+        return if (unit == UnitSystem.IMPERIAL) m / 1609.344 else m / 1000.0
+    }
+    private fun distanceUnitLabel(): String =
+        if (unit == UnitSystem.IMPERIAL) "mi" else "km"
+
+    private fun formatNum(v: Double): String = String.format(Locale.US, "%.1f", v)
 
     private fun formatDuration(seconds: Long): String {
         val h = seconds / 3600
@@ -157,95 +162,18 @@ class SavedRoutesFragment: Fragment(R.layout.fragment_saved_routes) {
         onNo: (() -> Unit)? = null
     ) {
         val dialogView = layoutInflater.inflate(R.layout.custom_alert_dialog, null)
-
         val dialog = AlertDialog.Builder(requireContext())
             .setView(dialogView)
             .setCancelable(true)
             .create()
-
         dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
         dialog.show()
 
         dialogView.findViewById<TextView>(R.id.message).setText(R.string.delete_string)
-
-        dialogView.findViewById<TextView>(R.id.yes).setOnClickListener {
-            dialog.dismiss()
-            onYes()
-        }
-        dialogView.findViewById<TextView>(R.id.no).setOnClickListener {
-            dialog.dismiss()
-            onNo?.invoke()
-        }
-
+        dialogView.findViewById<TextView>(R.id.yes).setOnClickListener { dialog.dismiss(); onYes() }
+        dialogView.findViewById<TextView>(R.id.no).setOnClickListener  { dialog.dismiss(); onNo?.invoke() }
     }
 
-
-    private fun insertSampleRides(count: Int = 10) {
-        val cities = listOf(
-            51.5074 to -0.1278,   // London
-            53.4808 to -2.2426,   // Manchester
-            55.9533 to -3.1883,   // Edinburgh
-            48.8566 to  2.3522,   // Paris
-            52.5200 to 13.4050    // Berlin
-        )
-        val profiles = listOf("cycling-regular", "cycling-road", "cycling-mountain")
-        val dirs = listOf("CLOCKWISE", "COUNTERCLOCKWISE")
-
-        viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
-            val dao = AppDatabase.getInstance(requireContext()).rideDao()
-            val now = System.currentTimeMillis()
-            val dayMs = 24L * 60 * 60 * 1000
-
-            repeat(count) {
-                val (lat, lon) = cities.random()
-                val lenMeters = listOf(5_000, 12_000, 25_000, 40_000, 65_000).random()
-                val profile = profiles.random()
-                val dir = dirs.random()
-                val seed = (1..100_000).random()
-
-                // Random date within last 30 days
-                val createdAt = now - (0..30).random() * dayMs
-
-                val km = lenMeters / 1000.0
-                val durationSeconds = ((km / 15.0) * 3600.0).toLong().coerceAtLeast(300L)
-
-                val ride = RideEntity(
-                    id = 0,
-                    name = "", // will rename after insert
-                    startLat = lat,
-                    startLon = lon,
-                    specLengthMeters = lenMeters,
-                    specProfile = profile,
-                    specSeed = seed,
-                    specDir = dir,
-                    polylineJson = null,
-                    distanceMeters = lenMeters,
-                    durationSeconds = durationSeconds,
-                    avgSpeedKmh = null,
-                    difficulty = difficultyForDistance(lenMeters),
-                    description = null,
-                    rating = null,
-                    createdAt = createdAt
-                )
-
-                val id = dao.insert(ride)
-                dao.updateName(id, "Route $id")
-            }
-
-            withContext(Dispatchers.Main) {
-                Toast.makeText(requireContext(), "Inserted $count dummy rides", Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
-
-    private fun difficultyForDistance(meters: Int): Int {
-        val km = meters / 1000.0
-        return when {
-            km < 10   -> 1
-            km < 30   -> 2
-            km < 60   -> 3
-            km < 100  -> 4
-            else      -> 5
-        }
-    }
+    // (keep your insertSampleRides() and difficultyForDistance() as-is)
 }
+

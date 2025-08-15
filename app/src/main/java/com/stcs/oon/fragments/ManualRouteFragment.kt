@@ -1,6 +1,5 @@
 package com.stcs.oon.fragments
 
-import android.util.Log
 import android.os.Bundle
 import android.view.View
 import androidx.fragment.app.Fragment
@@ -8,7 +7,9 @@ import com.stcs.oon.R
 import android.widget.*
 import androidx.core.content.ContextCompat
 import androidx.core.os.bundleOf
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.fragment.findNavController
 import com.google.gson.Gson
 import com.stcs.oon.db.AppDatabase
@@ -28,7 +29,7 @@ import kotlin.math.*
 import com.stcs.oon.fragments.helpers.*
 import com.stcs.oon.fragments.extra.NavigatorFragment
 import org.osmdroid.views.overlay.mylocation.MyLocationNewOverlay
-import java.util.Locale
+
 
 class ManualRouteFragment : Fragment(R.layout.fragment_manual_route) {
 
@@ -59,6 +60,10 @@ class ManualRouteFragment : Fragment(R.layout.fragment_manual_route) {
     private lateinit var locationRequester: LocationPermissionRequester
     private var myLocationOverlay: MyLocationNewOverlay? = null
 
+    // Units
+    private var currentUnit: UnitSystem = UnitSystem.METRIC
+    private var unitJob: Job? = null
+
     companion object {
         const val ARG_RIDE_ID = "arg_ride_id"
     }
@@ -79,6 +84,17 @@ class ManualRouteFragment : Fragment(R.layout.fragment_manual_route) {
         view.isClickable = true
         view.isFocusableInTouchMode = true
         view.installHideKeyboardOnTouchOutside()
+
+        // observe unit system
+        unitJob = viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                UserPrefs.unitFlow(requireContext()).collect { unit ->
+                    currentUnit = unit
+                    // re-render stats with the same routed points
+                    updateStats(routedPoints)
+                }
+            }
+        }
 
         // osmdroid
         val base = requireContext().cacheDir.resolve("osmdroid")
@@ -146,9 +162,9 @@ class ManualRouteFragment : Fragment(R.layout.fragment_manual_route) {
         myLocationOverlay?.disableMyLocation()
         myLocationOverlay = null
         routeJob?.cancel()
+        unitJob?.cancel()
         super.onDestroyView()
     }
-
 
     // ---------- Waypoints ----------
     private fun toggleAddMode(enabled: Boolean) {
@@ -274,7 +290,7 @@ class ManualRouteFragment : Fragment(R.layout.fragment_manual_route) {
         mapView.invalidate()
     }
 
-    // ---------- Stats ----------
+    // ---------- Stats (unit-aware) ----------
     private fun updateStats(points: List<GeoPoint>) {
         val meters = polylineLength(points)
         val km = meters / 1000.0
@@ -282,7 +298,8 @@ class ManualRouteFragment : Fragment(R.layout.fragment_manual_route) {
         val h = floor(hours).toInt()
         val m = ((hours - h) * 60.0).roundToInt()
 
-        distanceTv.text = "${formatKm(km)} km"
+        // distance in user units
+        distanceTv.text = Units.formatDistance(meters, currentUnit)
         timeTv.text = if (h > 0) "${h} h ${m} min" else "$m min"
         difficultyTv.text = "${difficultyForDistance(meters)}/5"
     }
@@ -318,9 +335,7 @@ class ManualRouteFragment : Fragment(R.layout.fragment_manual_route) {
         }
     }
 
-    private fun formatKm(v: Double) = String.format(Locale.US, "%.1f", v)
-
-    // ---------- Save & Navigate (single place to navigate) ----------
+    // ---------- Save & Navigate ----------
     private fun generateAndNavigate() {
         if (waypoints.size < 2 || routedPoints.isEmpty()) {
             Toast.makeText(requireContext(), "Add at least two points", Toast.LENGTH_SHORT).show()
@@ -364,10 +379,11 @@ class ManualRouteFragment : Fragment(R.layout.fragment_manual_route) {
                 Toast.makeText(requireContext(), "Route $rideId created", Toast.LENGTH_SHORT).show()
                 findNavController().navigate(
                     R.id.navigatorFragment,
-                    bundleOf(ARG_RIDE_ID to rideId)
+                    bundleOf(NavigatorFragment.ARG_RIDE_ID to rideId)
                 )
             }
         }
     }
 }
+
 
