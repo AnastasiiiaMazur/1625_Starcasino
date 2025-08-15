@@ -173,7 +173,6 @@ class ManualRouteFragment : Fragment(R.layout.fragment_manual_route) {
         val col = if (enabled) R.color.white else R.color.black
         addBtn.setBackgroundResource(bg)
         addBtn.setTextColor(ContextCompat.getColor(requireContext(), col))
-        Toast.makeText(requireContext(), "Tap the map to add a point", Toast.LENGTH_SHORT).show()
     }
 
     private fun addWaypoint(p: GeoPoint) {
@@ -376,10 +375,9 @@ class ManualRouteFragment : Fragment(R.layout.fragment_manual_route) {
 
             withContext(Dispatchers.Main) {
                 generateBtn.isEnabled = true
-                Toast.makeText(requireContext(), "Route $rideId created", Toast.LENGTH_SHORT).show()
                 findNavController().navigate(
                     R.id.navigatorFragment,
-                    bundleOf(NavigatorFragment.ARG_RIDE_ID to rideId)
+                    bundleOf(ARG_RIDE_ID to rideId)
                 )
             }
         }
